@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: cmc_raw
+    database: dwh
+    schema: staging_layer
+    tables:
+      - name: listings_latest
+      - name: quotes
+      - name: categories
+      - name: category_details
+      - name: map
+      - name: info
