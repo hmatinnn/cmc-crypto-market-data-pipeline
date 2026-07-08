@@ -1,0 +1,12 @@
+.env
+.venv/
+logs/
+api_responses/
+api_responses_csv/
+__pycache__/
+
+# dbt
+dbt/cmc_pipeline/profiles.yml
+dbt/cmc_pipeline/target/
+dbt/cmc_pipeline/logs/
+dbt/cmc_pipeline/dbt_packages/
