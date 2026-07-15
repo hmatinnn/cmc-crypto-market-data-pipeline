@@ -49,8 +49,8 @@ x-airflow-common:
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.
   # Comment the image line, place your Dockerfile in the directory where you placed the docker-compose.yaml
   # and uncomment the "build" line below, Then run `docker-compose build` to build the images.
-  image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.2}
-  # build: .
+  # image: ${AIRFLOW_IMAGE_NAME:-apache/airflow:3.2.2} ## **************************
+  build: .
   env_file:
     - ${ENV_FILE_PATH:-.env}
   environment:
@@ -86,6 +86,7 @@ x-airflow-common:
     - ./jobs:/opt/airflow/jobs   ## **************************
     - ./api_responses:/opt/airflow/api_responses ## **************************
     - ./api_responses_csv:/opt/airflow/api_responses_csv ## **************************
+    - ./soda:/opt/airflow/soda  ## **************************
 
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on:
@@ -124,6 +125,18 @@ services:
     image: dbt
     depends_on:
       - postgres
+
+  soda:     ## **************************
+    build:
+      context: ./soda
+      dockerfile: Dockerfile
+    volumes:
+      - ./soda:/sodacl
+    image: soda
+    # networks:
+    #   - coinmarket_pipeline_project_default
+    depends_on:
+      - postgres    
 
   redis:
     # Redis is limited to 7.2-bookworm due to licencing change

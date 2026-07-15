@@ -15,7 +15,7 @@ TABLES = {
             "last_updated", "tvl_ratio", "self_reported_circulating_supply",
             "self_reported_market_cap", "minted_market_cap", "inserted_at"
         ],
-        "pk": ["id", "inserted_at"],
+        # "pk": ["id", "inserted_at"],  
         "csv_file": "listing_latest.csv",
     },
 
@@ -23,9 +23,9 @@ TABLES = {
         "columns": [
             "id", "name", "title", "description", "volume", "num_tokens",
             "avg_price_change", "market_cap", "market_cap_change",
-            "volume_change", "last_updated"
+            "volume_change", "last_updated", "inserted_at"
         ],
-        "pk": ["id"],
+        # "pk": ["id", "inserted_at"],
         "csv_file": "categories.csv",
     },
 
@@ -33,9 +33,9 @@ TABLES = {
         "columns": [
             "id", "name", "title", "description", "volume", "num_tokens",
             "last_updated", "avg_price_change", "market_cap",
-            "market_cap_change", "volume_change", "coins_id" 
+            "market_cap_change", "volume_change", "coins_id", "inserted_at"
         ],
-        "pk": ["id", "coins_id"],
+        # "pk": ["id", "coins_id", "inserted_at"],
         "csv_file": "category_details.csv",
     },
 
@@ -44,7 +44,7 @@ TABLES = {
             "id", "name", "symbol", "slug", "is_active",
             "first_historical_data", "last_historical_data"
         ],
-        "pk": ["id" ],
+        # "pk": ["id"],
         "csv_file": "map.csv",
     },
 
@@ -53,7 +53,7 @@ TABLES = {
             "id", "category", "description", "logo",
             "date_launched"
         ],
-        "pk": ["id" ],
+        # "pk": ["id"],
         "csv_file": "info.csv",
     },
 
@@ -67,16 +67,16 @@ TABLES = {
             "quote_percent_change_30d", "quote_percent_change_60d",
             "quote_percent_change_90d", "quote_market_cap",
             "quote_market_cap_dominance", "quote_fully_diluted_market_cap",
-            "quote_minted_market_cap", "quote_tvl", "quote_last_updated","inserted_at"  
+            "quote_minted_market_cap", "quote_tvl", "quote_last_updated", "inserted_at"
         ],
-        "pk": ["id", "quote_id", "inserted_at"],
+        # "pk": ["id", "quote_id", "inserted_at"],
         "csv_file": "quotes.csv",
     },
 }
 
 
-
 def load_table(table_key, **context):
+  
     cfg = TABLES[table_key]
     csv_path = os.path.join(CSV_BASE_PATH, cfg["csv_file"])
 
@@ -90,8 +90,6 @@ def load_table(table_key, **context):
     table_name = f"staging_layer.{table_key}"
     tmp_table = f"tmp_{table_key}"
     columns = cfg["columns"]
-    pk = cfg["pk"]
-    update_cols = [c for c in columns if c not in pk]
 
     cur.execute(f"""
         CREATE TEMP TABLE {tmp_table} AS
@@ -107,18 +105,15 @@ def load_table(table_key, **context):
             f,
         )
 
-    set_clause = ", ".join([f"{c} = EXCLUDED.{c}" for c in update_cols])
+    cur.execute(f"TRUNCATE TABLE {table_name};")
     cur.execute(f"""
         INSERT INTO {table_name}
-        SELECT * FROM {tmp_table}
-        ON CONFLICT ({", ".join(pk)}) DO UPDATE SET
-            {set_clause};
+        SELECT * FROM {tmp_table};
     """)
 
     conn.commit()
     cur.close()
     conn.close()
-
 
 
 with DAG(

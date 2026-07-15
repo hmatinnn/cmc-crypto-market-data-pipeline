@@ -18,8 +18,8 @@ CREATE TABLE IF NOT EXISTS staging_layer.listings_latest (
     self_reported_circulating_supply    NUMERIC(30, 4),
     self_reported_market_cap            NUMERIC(30, 4),
     minted_market_cap                   NUMERIC(30, 4),
-    inserted_at                         TIMESTAMP,
-    PRIMARY KEY (id, inserted_at)
+    inserted_at                         TIMESTAMP
+   
 );
 """
 
@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS staging_layer.categories (
     market_cap_change   NUMERIC(20, 6),
     volume_change       NUMERIC(20, 6),
     last_updated        TIMESTAMP,
-    PRIMARY KEY (id)
+    inserted_at                         TIMESTAMP
+    
 );
 """
 
@@ -55,7 +56,7 @@ CREATE TABLE IF NOT EXISTS staging_layer.category_details (
     market_cap_change   NUMERIC(20, 6),
     volume_change       NUMERIC(20, 6),
     coins_id            BIGINT,
-    PRIMARY KEY (id, coins_id)
+    inserted_at                         TIMESTAMP
 );
 """
 
@@ -67,8 +68,7 @@ CREATE TABLE IF NOT EXISTS staging_layer.map (
     slug                    VARCHAR(100),
     is_active               SMALLINT,
     first_historical_data   TIMESTAMP,
-    last_historical_data    TIMESTAMP,
-    PRIMARY KEY (id)
+    last_historical_data    TIMESTAMP
 );
 """
 
@@ -78,8 +78,7 @@ CREATE TABLE IF NOT EXISTS staging_layer.info (
     category        VARCHAR(100),
     description     TEXT,
     logo            VARCHAR(255),
-    date_launched   TIMESTAMP,
-    PRIMARY KEY (id)
+    date_launched   TIMESTAMP
 );
 """
 
@@ -109,8 +108,7 @@ CREATE TABLE IF NOT EXISTS staging_layer.quotes (
     quote_minted_market_cap         NUMERIC(30, 4),
     quote_tvl                       NUMERIC(30, 4),
     quote_last_updated              TIMESTAMP,
-    inserted_at                     TIMESTAMP,
-    PRIMARY KEY (id, quote_id, inserted_at)
+    inserted_at                     TIMESTAMP
 );
 """
 
