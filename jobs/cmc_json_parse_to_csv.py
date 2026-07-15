@@ -250,7 +250,7 @@ class CryptoDataParser:
     def save_to_csv(self, OUTPUT_DIR: str = "silver_csv", index: bool = False):
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-        HISTORICAL_TABLES = {"listing_latest", "quotes"}
+        HISTORICAL_TABLES = {"categories", "category_details", "listing_latest", "quotes"}
 
         run_ts = datetime.now()
         run_ts_str = run_ts.strftime("%Y-%m-%d %H:%M:%S")
@@ -265,10 +265,20 @@ class CryptoDataParser:
                 if os.path.exists(filepath):
                     existing_df = pd.read_csv(filepath)
 
-                    existing_dates = pd.to_datetime(existing_df["inserted_at"]).dt.strftime("%Y-%m-%d")
-                    existing_df = existing_df[existing_dates != today_str]
-
-                    df = pd.concat([existing_df, df], ignore_index=True)
+                    if "inserted_at" in existing_df.columns:
+                        existing_dates = pd.to_datetime(existing_df["inserted_at"]).dt.strftime("%Y-%m-%d")
+                        existing_df = existing_df[existing_dates != today_str]
+                        df = pd.concat([existing_df, df], ignore_index=True)
+                    else:
+                        # Old file predates the inserted_at/accumulation logic for this table.
+                        # Treat it as a one-time migration: stamp it with today's run and keep it,
+                        # so we don't silently discard historical rows.
+                        print(
+                            f"'{filepath}' has no 'inserted_at' column (pre-accumulation file). "
+                            f"Backfilling with run timestamp and merging."
+                        )
+                        existing_df["inserted_at"] = run_ts_str
+                        df = pd.concat([existing_df, df], ignore_index=True)
 
                 df.to_csv(filepath, index=index, encoding="utf-8")
                 print(f"Saved '{name}' -> {filepath} ({len(df)} rows total, historical)")

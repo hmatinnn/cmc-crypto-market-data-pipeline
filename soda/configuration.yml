@@ -1,0 +1,9 @@
+data_source dwh:
+  type: postgres
+  connection:
+    host: postgres
+    port: 5432
+    username: airflow
+    password: airflow
+    database: dwh
+  # schema: staging_layer

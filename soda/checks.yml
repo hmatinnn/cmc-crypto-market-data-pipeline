@@ -1,0 +1,142 @@
+## categories table checks
+filter staging_layer.categories [weekly]:
+  where: inserted_at >= NOW() - INTERVAL '8 days'
+
+checks for staging_layer.categories:
+  - row_count > 0
+  - missing_count(id) = 0
+  - freshness(inserted_at) <= 1d
+  - missing_percent(market_cap_change) < 15%
+  - min(volume) >= 0
+  - min(market_cap) >= 0
+  - min(num_tokens) >= 0
+
+checks for staging_layer.categories [weekly]:
+  - row_count between 480 and 520
+  - missing_count(id) = 0
+  - duplicate_count(id) = 0
+
+
+## category_details table checks
+
+filter staging_layer.category_details [weekly]:
+  where: inserted_at >= NOW() - INTERVAL '8 days'
+
+checks for staging_layer.category_details:
+  - row_count > 0
+  - freshness(inserted_at) <= 9d
+  - missing_count(id) = 0
+  - missing_count(coins_id) = 0
+  - missing_percent(market_cap_change) < 15%
+  - min(volume) >= 0
+  - min(market_cap) >= 0
+  - min(num_tokens) >= 0
+
+checks for staging_layer.category_details [weekly]:
+  - row_count between 56500 and 62500
+  - missing_count(id) = 0
+  - missing_count(coins_id) = 0
+  - failed rows:
+      name: "id + coins_id + inserted_at should be unique"
+      fail query: |
+        SELECT id, coins_id, inserted_at, COUNT(*) as cnt
+        FROM staging_layer.category_details
+        WHERE inserted_at >= NOW() - INTERVAL '8 days'
+        GROUP BY id, coins_id, inserted_at
+        HAVING COUNT(*) > 1
+
+## info table checks
+      
+checks for staging_layer.info:
+  - row_count > 0
+  - missing_percent(date_launched) < 15%
+
+## info table listing_latest checks
+
+## listings_latest table checks (daily accumulation, same-day replacement)
+
+## listings_latest table checks (daily accumulation, same-day replacement, ~500 rows/day)
+
+filter staging_layer.listings_latest [daily]:
+  where: inserted_at >= CURRENT_DATE
+
+checks for staging_layer.listings_latest:
+  - row_count > 0
+  - freshness(inserted_at) <= 2d
+  - missing_count(id) = 0
+  - missing_count(cmc_rank) = 0
+  - missing_count(last_updated) = 0
+  - missing_count(date_added) = 0
+  - missing_count(num_market_pairs) = 0
+  - missing_count(circulating_supply) = 0
+  - missing_count(total_supply) = 0
+  - missing_count(infinite_supply) = 0
+  - missing_count(minted_market_cap) = 0
+  - missing_count(inserted_at) = 0
+  - missing_percent(max_supply) < 50%
+  - missing_percent(tvl_ratio) < 96%
+  - missing_percent(self_reported_circulating_supply) < 45%
+  - missing_percent(self_reported_market_cap) < 45%
+
+checks for staging_layer.listings_latest [daily]:
+  - row_count between 480 and 520
+  - missing_count(id) = 0
+  - missing_count(cmc_rank) = 0
+  - failed rows:
+      name: "id + inserted_at should be unique"
+      fail query: |
+        SELECT id, DATE(inserted_at) AS day, COUNT(*) AS cnt
+        FROM staging_layer.listings_latest
+        WHERE inserted_at >= CURRENT_DATE
+        GROUP BY id, DATE(inserted_at)
+        HAVING COUNT(*) > 1
+
+## quotes table checks 
+
+
+## quotes table checks (daily accumulation, ~400 rows/day, 8 günlük tarixçə ~3200 sətir)
+
+filter staging_layer.quotes [daily]:
+  where: inserted_at >= CURRENT_DATE
+
+checks for staging_layer.quotes:
+  - row_count > 0
+  - freshness(inserted_at) <= 2d
+  - missing_count(id) = 0
+  - missing_count(name) = 0
+  - missing_count(symbol) = 0
+  - missing_count(slug) = 0
+  - missing_count(is_fiat) = 0
+  - missing_count(quote_id) = 0
+  - missing_count(quote_symbol) = 0
+  - missing_count(quote_volume_24h) = 0
+  - missing_count(quote_volume_change_24h) = 0
+  - missing_count(quote_cex_volume_24h) = 0
+  - missing_count(quote_dex_volume_24h) = 0
+  - missing_count(quote_percent_change_1h) = 0
+  - missing_count(quote_percent_change_24h) = 0
+  - missing_count(quote_percent_change_7d) = 0
+  - missing_count(quote_percent_change_30d) = 0
+  - missing_count(quote_percent_change_60d) = 0
+  - missing_count(quote_percent_change_90d) = 0
+  - missing_count(quote_market_cap_dominance) = 0
+  - missing_count(quote_fully_diluted_market_cap) = 0
+  - missing_count(quote_minted_market_cap) = 0
+  - missing_count(quote_last_updated) = 0
+  - missing_count(inserted_at) = 0
+  - missing_percent(quote_price) < 1%
+  - missing_percent(quote_market_cap) < 1%
+  - missing_percent(quote_tvl) < 96%
+
+checks for staging_layer.quotes [daily]:
+  - row_count between 380 and 420
+  - missing_count(id) = 0
+  - missing_count(quote_id) = 0
+  - failed rows:
+      name: "id + quote_id + inserted_at should be unique"
+      fail query: |
+        SELECT id, quote_id, DATE(inserted_at) AS day, COUNT(*) AS cnt
+        FROM staging_layer.quotes
+        WHERE inserted_at >= CURRENT_DATE
+        GROUP BY id, quote_id, DATE(inserted_at)
+        HAVING COUNT(*) > 1
