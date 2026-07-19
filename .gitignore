@@ -9,3 +9,4 @@ dbt/cmc_pipeline/profiles.yml
 dbt/cmc_pipeline/target/
 dbt/cmc_pipeline/logs/
 dbt/cmc_pipeline/dbt_packages/
+
