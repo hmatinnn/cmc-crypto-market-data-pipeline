@@ -1,6 +1,6 @@
 ## categories table checks
 filter staging_layer.categories [weekly]:
-  where: inserted_at >= NOW() - INTERVAL '8 days'
+  where: inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.categories)
 
 checks for staging_layer.categories:
   - row_count > 0
@@ -14,13 +14,20 @@ checks for staging_layer.categories:
 checks for staging_layer.categories [weekly]:
   - row_count between 480 and 520
   - missing_count(id) = 0
-  - duplicate_count(id) = 0
+  - failed rows:
+      name: "id + inserted_at should be unique"
+      fail query: |
+        SELECT id, inserted_at, COUNT(*) AS cnt
+        FROM staging_layer.categories
+        WHERE inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.categories)
+        GROUP BY id, inserted_at
+        HAVING COUNT(*) > 1
 
 
 ## category_details table checks
 
 filter staging_layer.category_details [weekly]:
-  where: inserted_at >= NOW() - INTERVAL '8 days'
+  where: inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.category_details)
 
 checks for staging_layer.category_details:
   - row_count > 0
@@ -41,24 +48,20 @@ checks for staging_layer.category_details [weekly]:
       fail query: |
         SELECT id, coins_id, inserted_at, COUNT(*) as cnt
         FROM staging_layer.category_details
-        WHERE inserted_at >= NOW() - INTERVAL '8 days'
+        WHERE inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.category_details)
         GROUP BY id, coins_id, inserted_at
         HAVING COUNT(*) > 1
 
 ## info table checks
-      
+
 checks for staging_layer.info:
   - row_count > 0
   - missing_percent(date_launched) < 15%
 
-## info table listing_latest checks
-
-## listings_latest table checks (daily accumulation, same-day replacement)
-
-## listings_latest table checks (daily accumulation, same-day replacement, ~500 rows/day)
+## listings_latest table checks (per-insert, ~500 rows/batch)
 
 filter staging_layer.listings_latest [daily]:
-  where: inserted_at >= CURRENT_DATE
+  where: inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.listings_latest)
 
 checks for staging_layer.listings_latest:
   - row_count > 0
@@ -85,19 +88,16 @@ checks for staging_layer.listings_latest [daily]:
   - failed rows:
       name: "id + inserted_at should be unique"
       fail query: |
-        SELECT id, DATE(inserted_at) AS day, COUNT(*) AS cnt
+        SELECT id, inserted_at, COUNT(*) AS cnt
         FROM staging_layer.listings_latest
-        WHERE inserted_at >= CURRENT_DATE
-        GROUP BY id, DATE(inserted_at)
+        WHERE inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.listings_latest)
+        GROUP BY id, inserted_at
         HAVING COUNT(*) > 1
 
-## quotes table checks 
-
-
-## quotes table checks (daily accumulation, ~400 rows/day, 8 günlük tarixçə ~3200 sətir)
+## quotes table checks (per-insert, ~400 rows/batch)
 
 filter staging_layer.quotes [daily]:
-  where: inserted_at >= CURRENT_DATE
+  where: inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.quotes)
 
 checks for staging_layer.quotes:
   - row_count > 0
@@ -135,8 +135,8 @@ checks for staging_layer.quotes [daily]:
   - failed rows:
       name: "id + quote_id + inserted_at should be unique"
       fail query: |
-        SELECT id, quote_id, DATE(inserted_at) AS day, COUNT(*) AS cnt
+        SELECT id, quote_id, inserted_at, COUNT(*) AS cnt
         FROM staging_layer.quotes
-        WHERE inserted_at >= CURRENT_DATE
-        GROUP BY id, quote_id, DATE(inserted_at)
+        WHERE inserted_at = (SELECT MAX(inserted_at) FROM staging_layer.quotes)
+        GROUP BY id, quote_id, inserted_at
         HAVING COUNT(*) > 1
