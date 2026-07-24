@@ -247,6 +247,38 @@ class CryptoDataParser:
     #         df.to_csv(filepath, index=index, encoding="utf-8")
     #         print(f"Saved '{name}' -> {filepath} ({len(df)} rows)")
 
+    # Natural key per historical table, used to compare a fresh parse against
+    # the last recorded snapshot so a stale re-fetch (e.g. categories/
+    # category_details only actually change @weekly, but this parser runs
+    # @daily for every dataset) doesn't append a duplicate row with a new
+    # inserted_at every day it happens to re-run against unchanged source JSON.
+    KEY_COLUMNS = {
+        "categories": ["id"],
+        "category_details": ["id", "coins_id"],
+        "listing_latest": ["id"],
+        "quotes": ["id"],
+    }
+
+    @staticmethod
+    def _same_as_last_snapshot(new_df: pd.DataFrame, existing_df: pd.DataFrame, key_cols: list) -> bool:
+        """True if new_df (freshly parsed, no inserted_at yet) is identical,
+        row for row, to the most recent inserted_at snapshot in existing_df."""
+        if existing_df.empty or "inserted_at" not in existing_df.columns:
+            return False
+        if not all(k in existing_df.columns for k in key_cols):
+            return False
+
+        last_ts = existing_df["inserted_at"].max()
+        last_snapshot = existing_df[existing_df["inserted_at"] == last_ts].drop(columns=["inserted_at"])
+
+        if set(last_snapshot.columns) != set(new_df.columns) or len(last_snapshot) != len(new_df):
+            return False
+
+        cols = list(new_df.columns)
+        last_sorted = last_snapshot[cols].sort_values(key_cols).reset_index(drop=True)
+        new_sorted = new_df[cols].sort_values(key_cols).reset_index(drop=True)
+        return last_sorted.astype(str).equals(new_sorted.astype(str))
+
     def save_to_csv(self, OUTPUT_DIR: str = "silver_csv", index: bool = False):
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -260,14 +292,21 @@ class CryptoDataParser:
             filepath = os.path.join(OUTPUT_DIR, f"{name}.csv")
 
             if name in HISTORICAL_TABLES:
-                df["inserted_at"] = run_ts_str
-
                 if os.path.exists(filepath):
                     existing_df = pd.read_csv(filepath)
 
                     if "inserted_at" in existing_df.columns:
+                        key_cols = self.KEY_COLUMNS.get(name, [])
+                        if key_cols and self._same_as_last_snapshot(df, existing_df, key_cols):
+                            print(
+                                f"'{name}' unchanged since last snapshot -- skipping "
+                                f"append, no new '{today_str}' row written."
+                            )
+                            continue
+
                         existing_dates = pd.to_datetime(existing_df["inserted_at"]).dt.strftime("%Y-%m-%d")
                         existing_df = existing_df[existing_dates != today_str]
+                        df["inserted_at"] = run_ts_str
                         df = pd.concat([existing_df, df], ignore_index=True)
                     else:
                         # Old file predates the inserted_at/accumulation logic for this table.
@@ -277,8 +316,11 @@ class CryptoDataParser:
                             f"'{filepath}' has no 'inserted_at' column (pre-accumulation file). "
                             f"Backfilling with run timestamp and merging."
                         )
+                        df["inserted_at"] = run_ts_str
                         existing_df["inserted_at"] = run_ts_str
                         df = pd.concat([existing_df, df], ignore_index=True)
+                else:
+                    df["inserted_at"] = run_ts_str
 
                 df.to_csv(filepath, index=index, encoding="utf-8")
                 print(f"Saved '{name}' -> {filepath} ({len(df)} rows total, historical)")
