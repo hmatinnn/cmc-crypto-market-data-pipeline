@@ -37,7 +37,7 @@ models:
       +materialized: view
       
     intermediate:
-      +materialized: ephemeral
+      +materialized: view
       +schema: intermediate_layer
     olap:
       +materialized: table

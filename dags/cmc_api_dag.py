@@ -31,19 +31,13 @@ default_args = {
     on_failure_callback=send_dag_failure_alert,
 )
 def cmc_listings_pipeline():
-    task(fetch_listings)()
-
-
-@dag(
-    schedule="@daily",
-    start_date=datetime(2026, 7, 2),
-    catchup=False,
-    tags=["cmc"],
-    default_args=default_args,
-    on_failure_callback=send_dag_failure_alert,
-)
-def cmc_quotes_pipeline():
-    task(fetch_quotes)()
+    # fetch_quotes now derives its data from fetch_listings's own response
+    # (see cmc_api_pull.py) instead of a separate API call, so it must run
+    # right after fetch_listings in the same DAG run -- as its own
+    # separately-scheduled DAG it could read a stale/missing listings file.
+    t_listings = task(fetch_listings)()
+    t_quotes = task(fetch_quotes)()
+    t_listings >> t_quotes
 
 
 @dag(
@@ -85,7 +79,6 @@ def cmc_categories_and_details_pipeline():
 
 
 cmc_listings_pipeline()
-cmc_quotes_pipeline()
 cmc_map_pipeline()
 cmc_info_pipeline()
 cmc_categories_and_details_pipeline()

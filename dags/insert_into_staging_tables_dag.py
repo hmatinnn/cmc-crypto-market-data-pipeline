@@ -119,7 +119,10 @@ def load_table(table_key, **context):
 with DAG(
     dag_id="load_staging_tables_dag",
     start_date=datetime(2026, 1, 1),
-    schedule="@daily",
+    # No longer runs on its own clock: cmc_silver_parser_pipeline triggers it
+    # via TriggerDagRunOperator right after it finishes writing the CSVs this
+    # DAG loads, which avoids reading a partially-written file.
+    schedule=None,
     catchup=False,
     tags=["staging", "load"],
 ) as dag:

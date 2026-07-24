@@ -1,8 +1,4 @@
-"""Tests for jobs/cmc_api_pull.py.
 
-Run with:
-    pytest pytest/test_cmc_api_pull.py -v
-"""
 import io
 import json
 import urllib.error
@@ -12,9 +8,6 @@ import pytest
 import cmc_api_pull as mod
 
 
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 class _FakeResponse:
 
@@ -48,9 +41,7 @@ def isolate_dirs(tmp_path, monkeypatch):
     return tmp_path
 
 
-# ---------------------------------------------------------------------------
-# CoinMarketCapClient._get
-# ---------------------------------------------------------------------------
+
 
 def test_get_returns_parsed_json_on_200(client, monkeypatch):
     payload = {"data": {"id": 1}}
@@ -103,9 +94,7 @@ def test_get_returns_none_on_unexpected_exception(client, monkeypatch, capsys):
     assert "boom" in capsys.readouterr().out
 
 
-# ---------------------------------------------------------------------------
-# CoinMarketCapClient.save_to_json
-# ---------------------------------------------------------------------------
+
 
 def test_save_to_json_writes_file(client, tmp_path):
     client.save_to_json({"data": [1, 2, 3]}, "out.json")
@@ -125,16 +114,16 @@ def test_save_to_json_skips_when_data_empty_dict(client, tmp_path):
     assert not (tmp_path / "out.json").exists()
 
 
-# ---------------------------------------------------------------------------
-# CoinMarketCapClient endpoint wrappers -- verify correct endpoint/params
-# ---------------------------------------------------------------------------
+
 
 def test_get_crypto_map_params(client, monkeypatch):
     captured = {}
     monkeypatch.setattr(client, "_get", lambda ep, params=None: captured.update(endpoint=ep, params=params) or {})
     client.get_crypto_map(limit=250)
     assert captured["endpoint"] == "/v1/cryptocurrency/map"
-    assert captured["params"] == {"listing_status": "active", "start": 1, "limit": 250}
+    assert captured["params"] == {
+        "listing_status": "active", "start": 1, "limit": 250, "sort": "cmc_rank",
+    }
 
 
 def test_get_latest_listings_params(client, monkeypatch):
@@ -169,18 +158,6 @@ def test_get_crypto_info_joins_ids(client, monkeypatch):
     assert captured["params"] == {"id": "1,2,3"}
 
 
-def test_get_latest_quotes_joins_ids(client, monkeypatch):
-    captured = {}
-    monkeypatch.setattr(client, "_get", lambda ep, params=None: captured.update(endpoint=ep, params=params) or {})
-    client.get_latest_quotes([7, 8])
-    assert captured["endpoint"] == "/v3/cryptocurrency/quotes/latest"
-    assert captured["params"] == {"id": "7,8", "convert": "USD"}
-
-
-# ---------------------------------------------------------------------------
-# _client()
-# ---------------------------------------------------------------------------
-
 def test_client_raises_without_api_key(monkeypatch):
     monkeypatch.setattr(mod, "API_KEY", "")
     with pytest.raises(RuntimeError, match="X_CMC_PRO_API_KEY"):
@@ -194,9 +171,6 @@ def test_client_builds_instance_with_api_key(monkeypatch):
     assert c.headers["X-CMC_PRO_API_KEY"] == "abc123"
 
 
-# ---------------------------------------------------------------------------
-# _load_ids_from
-# ---------------------------------------------------------------------------
 
 def test_load_ids_from_reads_first_available_file(tmp_path):
     (tmp_path / "listings.json").write_text(
@@ -225,9 +199,6 @@ def test_load_ids_from_raises_when_file_has_no_data(tmp_path):
         mod._load_ids_from("listings.json")
 
 
-# ---------------------------------------------------------------------------
-# fetch_* task functions
-# ---------------------------------------------------------------------------
 
 class _StubClient:
     """Stand-in for CoinMarketCapClient used to drive fetch_* functions."""
@@ -251,10 +222,6 @@ class _StubClient:
 
     def get_crypto_info(self, crypto_ids):
         return self.responses.get("info")
-
-    def get_latest_quotes(self, crypto_ids):
-        self.last_quote_ids = crypto_ids
-        return self.responses.get("quotes")
 
     def save_to_json(self, data, filename):
         self.saved.append((filename, data))
@@ -375,32 +342,106 @@ def test_fetch_info_raises_when_no_source_file(tmp_path, monkeypatch):
         mod.fetch_info()
 
 
+def _coin_with_quote(coin_id, **usd_overrides):
+    usd = {
+        "price": 100.0,
+        "volume_24h": 1.0,
+        "volume_change_24h": 2.0,
+        "cex_volume_24h": 3.0,
+        "dex_volume_24h": 4.0,
+        "percent_change_1h": 5.0,
+        "percent_change_24h": 6.0,
+        "percent_change_7d": 7.0,
+        "percent_change_30d": 8.0,
+        "percent_change_60d": 9.0,
+        "percent_change_90d": 10.0,
+        "market_cap": 11.0,
+        "market_cap_dominance": 12.0,
+        "fully_diluted_market_cap": 13.0,
+        "tvl": None,
+        "last_updated": "2026-07-22T00:00:00.000Z",
+    }
+    usd.update(usd_overrides)
+    return {
+        "id": coin_id,
+        "name": f"Coin {coin_id}",
+        "symbol": f"C{coin_id}",
+        "slug": f"coin-{coin_id}",
+        "minted_market_cap": 999.0,
+        "quote": {"USD": usd},
+    }
+
+
+def test_fetch_quotes_derives_from_listings_without_client_call(tmp_path, monkeypatch):
+    (tmp_path / "v1_cryptocurrency_listings_latest.json").write_text(
+        json.dumps({"data": [_coin_with_quote(1)]}), encoding="utf-8"
+    )
+    stub = _StubClient()
+    monkeypatch.setattr(mod, "_client", lambda: stub)
+
+    mod.fetch_quotes()
+
+    assert len(stub.saved) == 1
+    filename, payload = stub.saved[0]
+    assert filename == "v3_cryptocurrency_quotes_latest.json"
+    coin = payload["data"][0]
+    assert coin["id"] == 1
+    assert coin["is_fiat"] == 0
+    q = coin["quote"][0]
+    assert q["id"] == mod.USD_QUOTE_CURRENCY_ID
+    assert q["symbol"] == "USD"
+    assert q["price"] == 100.0
+    assert q["market_cap"] == 11.0
+    # sourced from the coin's top-level minted_market_cap, since
+    # listings/latest doesn't nest it under quote.USD
+    assert q["minted_market_cap"] == 999.0
+
+
 def test_fetch_quotes_truncates_to_limit(tmp_path, monkeypatch):
     (tmp_path / "v1_cryptocurrency_listings_latest.json").write_text(
-        json.dumps({"data": [{"id": i} for i in range(1, 11)]}), encoding="utf-8"
+        json.dumps({"data": [_coin_with_quote(i) for i in range(1, 11)]}), encoding="utf-8"
     )
-    stub = _StubClient(responses={"quotes": {"data": {}}})
+    stub = _StubClient()
     monkeypatch.setattr(mod, "_client", lambda: stub)
 
     mod.fetch_quotes(limit=3)
 
-    assert stub.last_quote_ids == [1, 2, 3]
-    assert stub.saved == [("v3_cryptocurrency_quotes_latest.json", {"data": {}})]
+    _, payload = stub.saved[0]
+    assert [c["id"] for c in payload["data"]] == [1, 2, 3]
 
 
-def test_fetch_quotes_raises_when_empty(tmp_path, monkeypatch):
+def test_fetch_quotes_skips_coins_without_usd_quote(tmp_path, monkeypatch):
+    coin_without_quote = {"id": 99, "name": "NoQuote", "symbol": "NQ", "slug": "no-quote"}
     (tmp_path / "v1_cryptocurrency_listings_latest.json").write_text(
-        json.dumps({"data": [{"id": 1}]}), encoding="utf-8"
+        json.dumps({"data": [_coin_with_quote(1), coin_without_quote]}), encoding="utf-8"
     )
-    stub = _StubClient(responses={"quotes": None})
+    stub = _StubClient()
     monkeypatch.setattr(mod, "_client", lambda: stub)
-    with pytest.raises(RuntimeError, match="Failed to fetch /v3/cryptocurrency/quotes/latest"):
+
+    mod.fetch_quotes()
+
+    _, payload = stub.saved[0]
+    assert [c["id"] for c in payload["data"]] == [1]
+
+
+def test_fetch_quotes_raises_when_no_listings_file(tmp_path, monkeypatch):
+    stub = _StubClient()
+    monkeypatch.setattr(mod, "_client", lambda: stub)
+    with pytest.raises(RuntimeError, match="fetch_listings first"):
         mod.fetch_quotes()
 
 
-# ---------------------------------------------------------------------------
-# main() / TASKS dispatch
-# ---------------------------------------------------------------------------
+def test_fetch_quotes_raises_when_nothing_derived(tmp_path, monkeypatch):
+    (tmp_path / "v1_cryptocurrency_listings_latest.json").write_text(
+        json.dumps({"data": [{"id": 1, "name": "NoQuote"}]}), encoding="utf-8"
+    )
+    stub = _StubClient()
+    monkeypatch.setattr(mod, "_client", lambda: stub)
+    with pytest.raises(RuntimeError, match="No quotes could be derived"):
+        mod.fetch_quotes()
+
+
+
 
 def test_tasks_dict_maps_all_expected_names():
     assert set(mod.TASKS.keys()) == {
