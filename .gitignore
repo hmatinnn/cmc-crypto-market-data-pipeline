@@ -4,9 +4,13 @@ logs/
 api_responses/
 api_responses_csv/
 __pycache__/
+secrets/*.json
 
 dbt/cmc_pipeline/profiles.yml
 dbt/cmc_pipeline/target/
+dbt/cmc_pipeline/target_daily/
+dbt/cmc_pipeline/target_weekly/
+dbt/cmc_pipeline/target_monthly/
 dbt/cmc_pipeline/logs/
 dbt/cmc_pipeline/dbt_packages/
 

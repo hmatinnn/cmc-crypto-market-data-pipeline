@@ -61,7 +61,12 @@ class CoinMarketCapClient:
 
     def get_crypto_map(self, limit: int = 500) -> dict:
         print(f"Fetching cryptocurrency map (limit: {limit})...")
-        params = {"listing_status": "active", "start": 1, "limit": limit}
+        # sort=cmc_rank aligns this endpoint's coin population with
+        # get_latest_listings (also ranked by market cap). Without this,
+        # /v1/cryptocurrency/map defaults to sort=id, which returns the
+        # first 500 coins ever listed on CMC -- a mostly disjoint set from
+        # the current top-500-by-market-cap used everywhere else.
+        params = {"listing_status": "active", "start": 1, "limit": limit, "sort": "cmc_rank"}
         return self._get("/v1/cryptocurrency/map", params)
 
     def get_latest_listings(self, limit: int = 500) -> dict:
@@ -81,10 +86,6 @@ class CoinMarketCapClient:
     def get_crypto_info(self, crypto_ids: list) -> dict:
         id_string = ",".join([str(cid) for cid in crypto_ids])
         return self._get("/v2/cryptocurrency/info", {"id": id_string})
-
-    def get_latest_quotes(self, crypto_ids: list) -> dict:
-        id_string = ",".join([str(cid) for cid in crypto_ids])
-        return self._get("/v3/cryptocurrency/quotes/latest", {"id": id_string, "convert": "USD"})
 
 
 def _client() -> CoinMarketCapClient:
@@ -182,19 +183,77 @@ def fetch_info(chunk_size: int = 500):
     cmc.save_to_json(payload, "v2_cryptocurrency_info.json")
 
 
-def fetch_quotes(limit: int = 400):
-    """Depends on fetch_listings or fetch_map having run first. Free tier max = 400 ids."""
+# CMC's fixed internal currency id for USD. Stable/well-known constant --
+# see https://coinmarketcap.com/api/documentation (fiat currency ids don't
+# change), used below since we only ever convert to USD.
+USD_QUOTE_CURRENCY_ID = 2781
+
+
+def fetch_quotes(limit: int = 500):
+    # limit used to be capped at 400 because /v3/cryptocurrency/quotes/latest
+    # had a free-tier max of 400 ids per request. That call no longer
+    # happens -- this now just slices the already-fetched listings data --
+    # so the cap should match fetch_listings's own limit (500), not be
+    # stuck below it and silently drop quote data for ranks 401-500.
+
+    listings_path = os.path.join(INPUT_DIR, "v1_cryptocurrency_listings_latest.json")
+    if not os.path.exists(listings_path):
+        raise RuntimeError(
+            f"{listings_path} not found. fetch_quotes derives its data from "
+            "fetch_listings's output -- run fetch_listings first."
+        )
+
+    with open(listings_path, "r", encoding="utf-8") as f:
+        listings_data = json.load(f)
+
+    coins = listings_data.get("data", [])[:limit]
+
+    quotes_data = []
+    for coin in coins:
+        usd = (coin.get("quote") or {}).get("USD")
+        if not usd:
+            continue
+        quotes_data.append({
+            "id": coin.get("id"),
+            "name": coin.get("name"),
+            "symbol": coin.get("symbol"),
+            "slug": coin.get("slug"),
+            "is_fiat": 0,
+            "quote": [
+                {
+                    "id": USD_QUOTE_CURRENCY_ID,
+                    "symbol": "USD",
+                    "price": usd.get("price"),
+                    "volume_24h": usd.get("volume_24h"),
+                    "volume_change_24h": usd.get("volume_change_24h"),
+                    "cex_volume_24h": usd.get("cex_volume_24h"),
+                    "dex_volume_24h": usd.get("dex_volume_24h"),
+                    "percent_change_1h": usd.get("percent_change_1h"),
+                    "percent_change_24h": usd.get("percent_change_24h"),
+                    "percent_change_7d": usd.get("percent_change_7d"),
+                    "percent_change_30d": usd.get("percent_change_30d"),
+                    "percent_change_60d": usd.get("percent_change_60d"),
+                    "percent_change_90d": usd.get("percent_change_90d"),
+                    "market_cap": usd.get("market_cap"),
+                    "market_cap_dominance": usd.get("market_cap_dominance"),
+                    "fully_diluted_market_cap": usd.get("fully_diluted_market_cap"),
+                   
+                    "minted_market_cap": coin.get("minted_market_cap"),
+                    "tvl": usd.get("tvl"),
+                    "last_updated": usd.get("last_updated"),
+                }
+            ],
+        })
+
+    if not quotes_data:
+        raise RuntimeError("No quotes could be derived from listings_latest data.")
+
     cmc = _client()
-    crypto_ids = _load_ids_from(
-        "v1_cryptocurrency_listings_latest.json",
-        "v1_cryptocurrency_map.json",
-    )
-    quotes_chunk = crypto_ids[:limit]
-    print(f"Fetching latest quotes for {len(quotes_chunk)} ids from v3...")
-    data = cmc.get_latest_quotes(quotes_chunk)
-    if not data:
-        raise RuntimeError("Failed to fetch /v3/cryptocurrency/quotes/latest")
-    cmc.save_to_json(data, "v3_cryptocurrency_quotes_latest.json")
+    payload = {
+        "data": quotes_data,
+        "status": {"error_code": 0, "notice": "Derived from listings/latest -- no separate API call"},
+    }
+    cmc.save_to_json(payload, "v3_cryptocurrency_quotes_latest.json")
 
 
 TASKS = {

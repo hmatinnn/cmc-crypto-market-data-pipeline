@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  - name: dim_coins
+    description: Coin dimension. One row per coin.
+    columns:
+      - name: coin_id
+        description: CoinMarketCap coin id.
+        tests:
+          - unique
+          - not_null
+
+  - name: dim_categories
+    description: Category dimension. One row per category, latest snapshot.
+    columns:
+      - name: category_id
+        description: CoinMarketCap category id.
+        tests:
+          - unique
+          - not_null
+
+  - name: fact_coin_market
+    description: Coin market fact table. One row per coin, latest snapshot.
+    columns:
+      - name: coin_id
+        description: CoinMarketCap coin id. FK to dim_coins.
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_coins')
+              field: coin_id
+
+  - name: bridge_category_coin
+    description: Many-to-many bridge between coins and categories, latest snapshot.
+    columns:
+      - name: category_id
+        description: FK to dim_categories.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_categories')
+              field: category_id
+      - name: coin_id
+        description: FK to dim_coins.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_coins')
+              field: coin_id
