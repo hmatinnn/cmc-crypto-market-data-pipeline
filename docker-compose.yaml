@@ -398,6 +398,11 @@ services:
         echo "Files in shared volumes:"
         echo
         ls -la /opt/airflow/{logs,dags,plugins,config}
+        echo
+        echo "Creating dbt_shared_pool (serializes daily/weekly/monthly dbt runs so they"
+        echo "never build shared staging/intermediate models concurrently):"
+        echo
+        /entrypoint airflow pools set dbt_shared_pool 1 "Serializes dbt_daily_pipeline, dbt_weekly_pipeline and dbt_monthly_pipeline so they never run dbt concurrently against the same Postgres schema. These DAGs all rebuild shared upstream models (stg_cmc__map, stg_cmc__info, int_coins) via '+' selectors -- running them in parallel races on those shared views/tables."
 
     # yamllint enable rule:line-length
     environment:
