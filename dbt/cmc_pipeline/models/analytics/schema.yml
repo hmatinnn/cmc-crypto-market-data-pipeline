@@ -1,0 +1,34 @@
+version: 2
+
+models:
+  - name: vw_market_overview_daily
+    description: >
+      Whole-market daily time series (total/top-10 market cap, volumes,
+      BTC dominance, DEX share). One row per snapshot date. Superset
+      dataset for the Market Overview dashboard tab.
+    columns:
+      - name: snapshot_date
+        tests: [unique, not_null]
+
+  - name: vw_coin_explorer
+    description: >
+      Current state per coin with descriptive attributes and pre-computed
+      ratios (FDV/MC, supply utilization, MC/TVL). Superset dataset for
+      the Coin Explorer tab.
+    columns:
+      - name: coin_id
+        tests: [unique, not_null]
+
+  - name: vw_sector_performance
+    description: >
+      Per-category aggregates over tracked coins only (bridge join).
+      Superset dataset for the Sector tab (treemap, narrative rotation).
+    columns:
+      - name: category_id
+        tests: [unique, not_null]
+
+  - name: vw_coin_momentum_daily
+    description: >
+      Per coin per day rank + price history with rank_change vs previous
+      snapshot. Superset dataset for the Momentum tab (gainers/losers,
+      volatility, new entrants).
