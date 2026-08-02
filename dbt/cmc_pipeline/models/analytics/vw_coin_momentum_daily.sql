@@ -68,13 +68,13 @@ select
         ),
         l.cmc_rank
     )                                       as prev_cmc_rank,
-    
+    coalesce(
         lag(l.cmc_rank) over (
             partition by l.coin_id
             order by l.inserted_at::date
-        ) - l.cmc_rank,
-        
-                                          as rank_change,
+        ),
+        l.cmc_rank
+    ) - l.cmc_rank                          as rank_change,
     lag(l.cmc_rank) over (
         partition by l.coin_id
         order by l.inserted_at::date
