@@ -252,11 +252,26 @@ jobs:
           fi
           echo ".env is not tracked - OK"
 
-      - name: Gitleaks scan
+      # The official binary is installed directly instead of a Docker image:
+      # the old zricethezav/gitleaks image on Docker Hub is deprecated, and a
+      # pinned release is both faster and reproducible.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: "8.30.1"
         run: |
-          docker run --rm -v "${{ github.workspace }}:/repo" \
-            zricethezav/gitleaks:latest \
-            detect --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner -v
+          curl -sSfL \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            -o /tmp/gitleaks.tar.gz
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Gitleaks scan (full git history)
+        run: |
+          gitleaks git . \
+            --config .gitleaks.toml \
+            --redact \
+            --no-banner \
+            --verbose
 
   # ---------------------------------------------------------------------------
   # 6. FINAL GATE - branch protection points at this single job
