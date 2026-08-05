@@ -1,7 +1,7 @@
 import os
+import sys  # noqa: F401  - tests monkeypatch mod.sys.argv
 import json
 import ssl
-import sys
 import argparse
 import urllib.parse
 import urllib.request

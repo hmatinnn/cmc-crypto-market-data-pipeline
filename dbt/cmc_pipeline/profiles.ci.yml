@@ -1,0 +1,15 @@
+# dbt profile used by CI only.
+# The real profiles.yml is gitignored (it holds credentials), so CI uses this
+# separate profile pointing at an ephemeral postgres service container.
+cmc_pipeline:
+  target: ci
+  outputs:
+    ci:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'localhost') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | int }}"
+      user: "{{ env_var('DBT_USER', 'airflow') }}"
+      pass: "{{ env_var('DBT_PASSWORD', 'airflow') }}"
+      dbname: "{{ env_var('DBT_DATABASE', 'dwh') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'staging_layer') }}"
+      threads: 4

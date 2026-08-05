@@ -1,0 +1,88 @@
+name: CD (deploy to server)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag to deploy (default: main)"
+        required: false
+        default: main
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false  # deploys must not interrupt each other
+
+permissions:
+  contents: read
+
+jobs:
+  # Precondition for CD: CI must have passed.
+  # (on push to main the CI workflow runs in parallel, so we wait for it here)
+  wait-for-ci:
+    name: Wait for CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for CI workflow
+        uses: lewagon/wait-on-check-action@v1.3.4
+        with:
+          ref: ${{ github.sha }}
+          check-name: "CI OK"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 15
+          allowed-conclusions: success
+
+  deploy:
+    name: Deploy
+    needs: wait-for-ci
+    runs-on: ubuntu-latest
+    # Create a "production" environment under
+    # Settings -> Environments and add "Required reviewers" if you want each
+    # deploy to wait for your manual approval.
+    environment:
+      name: production
+
+    steps:
+      - name: Verify required secrets exist
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          missing=""
+          if [ -z "$SSH_HOST" ]; then missing="$missing SSH_HOST"; fi
+          if [ -z "$SSH_USER" ]; then missing="$missing SSH_USER"; fi
+          if [ -z "$SSH_PRIVATE_KEY" ]; then missing="$missing SSH_PRIVATE_KEY"; fi
+          if [ -z "$DEPLOY_PATH" ]; then missing="$missing DEPLOY_PATH"; fi
+          if [ -n "$missing" ]; then
+            echo "::error::These GitHub Secrets are not configured:$missing"
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Run deploy script on the server
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          command_timeout: 20m
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.DEPLOY_PATH }}"
+            # Invoked as "bash deploy/deploy.sh" rather than "./deploy/deploy.sh"
+            # on purpose: Windows cannot store the executable bit, so the file may
+            # arrive on the server with mode 644 and "./" would fail.
+            bash deploy/deploy.sh "${{ github.event.inputs.ref || 'main' }}"
+
+      - name: Deploy result
+        if: always()
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then
+            echo "Deploy succeeded: ${{ github.sha }}"
+          else
+            echo "::error::Deploy failed - check the server with 'docker compose ps'."
+          fi

@@ -1,12 +1,8 @@
-from operator import index
 import os
 import sys
 import json
-import certifi
-from dotenv import load_dotenv
 import pandas as pd
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 pd.set_option("display.max_columns", None)

@@ -1,0 +1,34 @@
+# Gitleaks configuration.
+# Goal: prevent real API keys (CoinMarketCap, Telegram bot token, DB passwords)
+# from being committed to the repository.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "coinmarketcap-api-key"
+description = "CoinMarketCap API key"
+regex = '''(?i)(cmc[_-]?api[_-]?key|X-CMC_PRO_API_KEY)\s*[:=]\s*['"]?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
+tags = ["api-key", "coinmarketcap"]
+
+[allowlist]
+description = "Known local-dev values and example files"
+
+paths = [
+  # Example file - contains placeholders only, no real values.
+  '''\.env\.example''',
+  # Default airflow/airflow credentials for local development.
+  '''docker-compose\.yaml''',
+  '''dbt/cmc_pipeline/profiles\.ci\.yml''',
+  '''superset/superset_config\.py''',
+  # Cache and artifact directories.
+  '''dbt/cmc_pipeline/target.*''',
+  '''\.pytest_cache/.*''',
+]
+
+regexes = [
+  '''airflow:airflow''',
+  '''your[_-]?api[_-]?key''',
+  '''changeme''',
+  '''<[A-Z_]+>''',
+]
