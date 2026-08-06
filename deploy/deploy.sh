@@ -67,15 +67,18 @@ fi
 log "Building images..."
 docker compose build --pull
 
-# --- 4. Airflow migrations --------------------------------------------------
-log "Running Airflow DB migration..."
-docker compose run --rm airflow-cli airflow db migrate
-
-# --- 5. Bring services up ---------------------------------------------------
+# --- 4. Bring services up ---------------------------------------------------
+# The DB migration is handled by the airflow-init service, which has
+# _AIRFLOW_DB_MIGRATE=true and runs automatically as part of "up".
+# (Do not call "docker compose run airflow-cli" here - that service sits behind
+# the "debug" profile and is not available by default.)
 log "Updating services..."
 docker compose up -d --remove-orphans
 
-# --- 6. Health check --------------------------------------------------------
+log "Waiting for airflow-init to finish (DB migration)..."
+docker compose wait airflow-init 2>/dev/null || true
+
+# --- 5. Health check --------------------------------------------------------
 log "Waiting 30s for services to come up..."
 sleep 30
 
@@ -89,7 +92,7 @@ fi
 log "All services are running:"
 docker compose ps
 
-# --- 7. Cleanup -------------------------------------------------------------
+# --- 6. Cleanup -------------------------------------------------------------
 log "Pruning old images..."
 docker image prune -f
 
