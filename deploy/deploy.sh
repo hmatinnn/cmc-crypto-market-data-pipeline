@@ -76,20 +76,59 @@ log "Updating services..."
 docker compose up -d --remove-orphans
 
 log "Waiting for airflow-init to finish (DB migration)..."
-docker compose wait airflow-init 2>/dev/null || true
+INIT_RC=0
+docker compose wait airflow-init >/dev/null 2>&1 || INIT_RC=$?
+if [ "$INIT_RC" -ne 0 ]; then
+  log "WARNING: airflow-init exited with code $INIT_RC. Logs:"
+  docker compose logs --tail 40 airflow-init || true
+fi
 
 # --- 5. Health check --------------------------------------------------------
-log "Waiting 30s for services to come up..."
-sleep 30
+log "Waiting 45s for services to come up..."
+sleep 45
 
-if docker compose ps --format '{{.Name}} {{.State}}' | grep -qiE 'exited|restarting'; then
+# airflow-init and superset-init are one-shot containers: they do their work and
+# exit with code 0. That is healthy, so they must not be treated as failures.
+# Anything else that exited non-zero, or is stuck restarting, is a real problem.
+UNHEALTHY="$(docker compose ps --all --format json 2>/dev/null | python3 -c '
+import json, sys
+
+ONE_SHOT = {"airflow-init", "superset-init"}
+raw = sys.stdin.read().strip()
+if not raw:
+    sys.exit(0)
+
+# Compose emits either a JSON array or newline-delimited JSON objects
+# depending on the version - handle both.
+try:
+    rows = json.loads(raw)
+    if isinstance(rows, dict):
+        rows = [rows]
+except json.JSONDecodeError:
+    rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
+
+for r in rows:
+    service = r.get("Service") or r.get("Name", "")
+    state = (r.get("State") or "").lower()
+    code = r.get("ExitCode", 0)
+    if state == "restarting":
+        print(f"{service}: stuck restarting")
+    elif state == "exited":
+        if service in ONE_SHOT and code == 0:
+            continue          # expected
+        print(f"{service}: exited with code {code}")
+')"
+
+if [ -n "$UNHEALTHY" ]; then
   log "WARNING: some containers are unhealthy:"
-  docker compose ps
-  log "To roll back: git reset --hard $PREV_SHA && ./deploy/deploy.sh"
+  echo "$UNHEALTHY"
+  echo
+  docker compose ps --all
+  log "To roll back: git reset --hard $PREV_SHA && bash deploy/deploy.sh"
   exit 1
 fi
 
-log "All services are running:"
+log "All services are healthy:"
 docker compose ps
 
 # --- 6. Cleanup -------------------------------------------------------------
