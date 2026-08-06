@@ -1,0 +1,6 @@
+# This directory is bind-mounted into the Airflow containers
+# (./config -> /opt/airflow/config in docker-compose.yaml).
+#
+# The directory itself must exist in the repository, but airflow.cfg must NOT:
+# Airflow generates it on first start and writes fernet_key, secret_key and
+# jwt_secret into it. See .gitignore.
