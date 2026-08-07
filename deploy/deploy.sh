@@ -103,7 +103,17 @@ log "Updating services..."
 UP_LOG="$(mktemp)"
 trap 'rm -f "$UP_LOG" "${DEPLOY_SELF_COPY_PATH:-}"' EXIT
 
-if ! docker compose up -d --remove-orphans 2>&1 | tee "$UP_LOG"; then
+# Docker aborts on the FIRST name it cannot claim, so one conflict is reported
+# per attempt. With five pinned container_names that means up to five rounds -
+# hence a loop rather than a single retry.
+MAX_UP_ATTEMPTS=8
+attempt=1
+
+while : ; do
+  if docker compose up -d --remove-orphans 2>&1 | tee "$UP_LOG"; then
+    break
+  fi
+
   CONFLICTS="$(grep -oE 'The container name "/[^"]+"' "$UP_LOG" \
                | sed -E 's|.*"/([^"]+)".*|\1|' | sort -u)"
 
@@ -112,15 +122,20 @@ if ! docker compose up -d --remove-orphans 2>&1 | tee "$UP_LOG"; then
     exit 1
   fi
 
-  log "Container name conflict detected. Removing stale containers:"
+  if [ "$attempt" -ge "$MAX_UP_ATTEMPTS" ]; then
+    log "ERROR: still hitting name conflicts after $MAX_UP_ATTEMPTS attempts."
+    log "Inspect manually with: docker ps -a"
+    exit 1
+  fi
+
+  log "Name conflict (attempt $attempt/$MAX_UP_ATTEMPTS). Removing stale containers:"
   for name in $CONFLICTS; do
     echo "  - $name"
     docker rm -f "$name" >/dev/null 2>&1 || true
   done
 
-  log "Retrying 'docker compose up'..."
-  docker compose up -d --remove-orphans
-fi
+  attempt=$((attempt + 1))
+done
 
 log "Waiting for airflow-init to finish (DB migration)..."
 INIT_RC=0
