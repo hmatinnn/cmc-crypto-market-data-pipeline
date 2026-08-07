@@ -14,7 +14,6 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 
 ## Table of Contents
 
-- [Screenshots](#screenshots)
 - [Why this design](#why-this-design)
 - [Architecture](#architecture)
 - [Data Source](#data-source)
@@ -31,18 +30,13 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 
 ---
 
+<!-- =========================== SCREENSHOTS ===========================
+  TO ENABLE: save the five images into docs/screenshots/ using exactly the
+  filenames below, then delete this comment's opening line and its closing
+  line so the section renders. See docs/screenshots/README.md for what to
+  capture.
+
 ## Screenshots
-
-<!--
-  Save the images into docs/screenshots/ with exactly these names and they will
-  appear here. Suggested captures, taken while the stack is running:
-
-    airflow-dags.png       Airflow home with the cmc_* pipelines enabled and green
-    airflow-graph.png      Graph view of one cadence chain (fetch -> parse -> load -> dbt)
-    superset-overview.png  The market overview dashboard
-    grafana-monitoring.png Freshness / row count / DAG status panels
-    ci-run.png             A green GitHub Actions run showing all six jobs
--->
 
 | Airflow — pipelines | Airflow — one cadence chain |
 |---|---|
@@ -55,6 +49,7 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 ![CI run](docs/screenshots/ci-run.png)
 
 ---
+==================================================================== -->
 
 ## Why this design
 
