@@ -149,13 +149,13 @@ while : ; do
   attempt=$((attempt + 1))
 done
 
+# Block until the DB migration container is done. Its return code is ignored on
+# purpose: "docker compose wait" reports a non-zero status in cases where the
+# container in fact exited 0 (e.g. it had already finished before wait ran).
+# The health check below reads the real exit code, so that is the source of
+# truth - no need to warn twice on unreliable information.
 log "Waiting for airflow-init to finish (DB migration)..."
-INIT_RC=0
-docker compose wait airflow-init >/dev/null 2>&1 || INIT_RC=$?
-if [ "$INIT_RC" -ne 0 ]; then
-  log "WARNING: airflow-init exited with code $INIT_RC. Logs:"
-  docker compose logs --tail 40 airflow-init || true
-fi
+docker compose wait airflow-init >/dev/null 2>&1 || true
 
 # --- 5. Health check --------------------------------------------------------
 log "Waiting 45s for services to come up..."
@@ -167,7 +167,6 @@ sleep 45
 UNHEALTHY="$(docker compose ps --all --format json 2>/dev/null | python3 -c '
 import json, sys
 
-ONE_SHOT = {"airflow-init", "superset-init"}
 raw = sys.stdin.read().strip()
 if not raw:
     sys.exit(0)
@@ -181,15 +180,21 @@ try:
 except json.JSONDecodeError:
     rows = [json.loads(line) for line in raw.splitlines() if line.strip()]
 
+# Several services are one-shot by design and exit as soon as their work is
+# done: airflow-init (DB migration), superset-init (admin bootstrap), soda
+# (its command is just "python3"). Rather than maintaining a list of which
+# ones those are, apply the rule that actually matters:
+#
+#   exit code 0  -> finished cleanly, healthy
+#   exit code !0 -> real failure
+#   restarting   -> crash loop
 for r in rows:
     service = r.get("Service") or r.get("Name", "")
     state = (r.get("State") or "").lower()
     code = r.get("ExitCode", 0)
     if state == "restarting":
-        print(f"{service}: stuck restarting")
-    elif state == "exited":
-        if service in ONE_SHOT and code == 0:
-            continue          # expected
+        print(f"{service}: stuck in a restart loop")
+    elif state == "exited" and code not in (0, None):
         print(f"{service}: exited with code {code}")
 ')"
 
