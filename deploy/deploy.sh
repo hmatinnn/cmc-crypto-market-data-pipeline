@@ -9,8 +9,25 @@
 
 set -euo pipefail
 
+# Step 2 below runs "git reset --hard", which rewrites THIS FILE while it is
+# still executing. Bash reads a script lazily by byte offset, so replacing the
+# file underneath a running shell can make it resume at the wrong position and
+# execute garbage. Re-exec from a private copy first, so the running code is
+# immune to the checkout.
+if [ "${DEPLOY_SELF_COPY:-0}" != "1" ]; then
+  DEPLOY_PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  export DEPLOY_PROJECT_DIR
+  SELF_COPY="$(mktemp)"
+  cp "${BASH_SOURCE[0]}" "$SELF_COPY"
+  export DEPLOY_SELF_COPY=1 DEPLOY_SELF_COPY_PATH="$SELF_COPY"
+  exec bash "$SELF_COPY" "$@"
+fi
+
+# Clean up the temporary copy of this script when we are done with it.
+trap 'rm -f "${DEPLOY_SELF_COPY_PATH:-}"' EXIT
+
 BRANCH="${1:-main}"
-PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROJECT_DIR="${DEPLOY_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
@@ -73,7 +90,37 @@ docker compose build --pull
 # (Do not call "docker compose run airflow-cli" here - that service sits behind
 # the "debug" profile and is not available by default.)
 log "Updating services..."
-docker compose up -d --remove-orphans
+
+# Five services (grafana, superset, superset-db, superset-init, dbt) pin an
+# explicit container_name. Those names are GLOBAL in Docker - they are not
+# namespaced by compose project - so when a service is recreated the old
+# container can still hold the name and "up" fails with:
+#
+#   Conflict. The container name "/grafana" is already in use by container ...
+#
+# Normal path: a plain "up" with no downtime. If a name conflict does happen,
+# free only the names Docker actually complained about and try once more.
+UP_LOG="$(mktemp)"
+trap 'rm -f "$UP_LOG" "${DEPLOY_SELF_COPY_PATH:-}"' EXIT
+
+if ! docker compose up -d --remove-orphans 2>&1 | tee "$UP_LOG"; then
+  CONFLICTS="$(grep -oE 'The container name "/[^"]+"' "$UP_LOG" \
+               | sed -E 's|.*"/([^"]+)".*|\1|' | sort -u)"
+
+  if [ -z "$CONFLICTS" ]; then
+    log "ERROR: 'docker compose up' failed for a reason other than a name conflict."
+    exit 1
+  fi
+
+  log "Container name conflict detected. Removing stale containers:"
+  for name in $CONFLICTS; do
+    echo "  - $name"
+    docker rm -f "$name" >/dev/null 2>&1 || true
+  done
+
+  log "Retrying 'docker compose up'..."
+  docker compose up -d --remove-orphans
+fi
 
 log "Waiting for airflow-init to finish (DB migration)..."
 INIT_RC=0
