@@ -44,6 +44,17 @@
 #
 # Feel free to modify this file to suit your needs.
 ---
+# Pin the Compose project name.
+#
+# Without this, Compose derives the project name from the directory it is run
+# from. The same repository checked out as ./cmc and as
+# /opt/coinmarket_pipeline_project therefore produced TWO independent stacks
+# with separate volumes and networks, fighting over ports 5432/8080 and
+# colliding on the pinned container_names below.
+#
+# A fixed name makes every checkout address the same stack, wherever it lives.
+name: cmc
+
 x-airflow-common:
   &airflow-common
   # In order to add custom dependencies or upgrade provider distributions you can use your extended image.

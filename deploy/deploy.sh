@@ -128,9 +128,21 @@ while : ; do
     exit 1
   fi
 
-  log "Name conflict (attempt $attempt/$MAX_UP_ATTEMPTS). Removing stale containers:"
+  log "Name conflict (attempt $attempt/$MAX_UP_ATTEMPTS): $(echo "$CONFLICTS" | tr '\n' ' ')"
+
+  # A partially completed "up" leaves a mixed state: some containers attached to
+  # the old compose network, some to the new one. Postgres then keeps running
+  # while airflow-init cannot resolve the hostname "postgres" at all.
+  #
+  # So tear the project down completely - containers AND network - instead of
+  # picking off containers one by one. Named volumes are preserved; "down"
+  # only removes them when called with -v.
+  log "Tearing the project down to rebuild a consistent network..."
+  docker compose down --remove-orphans || true
+
+  # Containers left over from an older compose project keep their pinned names
+  # and survive "down", so remove those explicitly.
   for name in $CONFLICTS; do
-    echo "  - $name"
     docker rm -f "$name" >/dev/null 2>&1 || true
   done
 
