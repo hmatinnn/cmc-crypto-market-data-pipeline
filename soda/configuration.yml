@@ -1,9 +1,14 @@
+# Soda Core connection to the warehouse.
+#
+# Values are read from environment variables so no password is committed.
+# Soda substitutes ${VAR} at load time; the containers receive .env via
+# env_file, and "postgres" is the compose service name.
 data_source dwh:
   type: postgres
   connection:
-    host: postgres
+    host: ${POSTGRES_HOST}
     port: 5432
-    username: airflow
-    password: airflow
+    username: ${POSTGRES_USER}
+    password: ${POSTGRES_PASSWORD}
     database: dwh
   # schema: staging_layer

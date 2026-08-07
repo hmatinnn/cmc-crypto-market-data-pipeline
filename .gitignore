@@ -14,7 +14,9 @@ config/airflow.cfg
 config/*.cfg
 !config/.gitkeep
 
-dbt/cmc_pipeline/profiles.yml
+# NOTE: dbt/cmc_pipeline/profiles.yml is intentionally NOT ignored. It reads
+# every value from environment variables, so it contains no secrets, and
+# committing it means a fresh clone can run dbt without any manual setup.
 dbt/cmc_pipeline/target/
 dbt/cmc_pipeline/target_daily/
 dbt/cmc_pipeline/target_weekly/

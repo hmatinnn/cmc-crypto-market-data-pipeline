@@ -287,14 +287,66 @@ Secrets (API key, DB passwords, bot token, SSH key) live in GitHub Actions Secre
 
 3. Bootstrap the warehouse (one time): trigger `create_schemas_dag` and `create_staging_tables_dag` in the Airflow UI, then enable the `cmc_*_fetch` and `soda_dq_check` pipelines.
 
-4. Open the UIs:
+   Nothing else needs configuring by hand — in particular:
+
+   - the `dwh` database is created by `db/init/01-create-dwh.sql` on first start;
+   - the Airflow connection `postgres_dwh` is supplied through the
+     `AIRFLOW_CONN_POSTGRES_DWH` environment variable, so it does not have to be
+     added in the UI;
+   - `dbt/cmc_pipeline/profiles.yml` and `soda/configuration.yml` read their
+     values from the environment, so they work as committed.
+
+4. Open the UIs (credentials are the ones you set in `.env`):
 
    | Service | URL |
    |---|---|
    | Airflow | http://localhost:8080 |
    | Superset | http://localhost:8088 |
    | Grafana | http://localhost:3000 |
-   | Flower (Celery) | http://localhost:5555 |
+   | Flower (Celery) | http://localhost:5555 (`--profile flower`) |
+
+---
+
+## Querying the warehouse
+
+### From the machine running the stack (DBeaver, psql, pandas…)
+
+Postgres is published on `127.0.0.1:5432`, so any client on the same machine
+connects normally:
+
+| Field | Value |
+|---|---|
+| Host | `localhost` |
+| Port | `5432` |
+| Database | `dwh` |
+| User | `airflow` |
+| Password | `POSTGRES_PASSWORD` from your `.env` (default `airflow`) |
+
+Useful schemas: `staging_layer` (raw, append-only), `olap` (star schema),
+`analytics` (BI-ready views).
+
+> The Airflow metadata lives in a separate database called `airflow` on the same
+> server. The warehouse is `dwh`.
+
+### From another machine
+
+The database is deliberately **not** published on a public interface — the
+credentials are in this repository, so exposing port 5432 would put the whole
+warehouse online. Use an SSH tunnel instead:
+
+```bash
+ssh -L 5432:localhost:5432 user@your-server
+```
+
+Then point DBeaver at `localhost:5432` as above; the traffic is carried over
+SSH. This works from anywhere and adds nothing to attack surface.
+
+### Exposing the web UIs on a server
+
+By default the UIs bind to `127.0.0.1` too. To make them reachable from the
+internet, set `BIND_HOST=0.0.0.0` in `.env` — but set strong
+`_AIRFLOW_WWW_USER_PASSWORD`, `GF_ADMIN_PASSWORD` and `SUPERSET_ADMIN_PASSWORD`
+first. An Airflow admin account is equivalent to code execution on the host.
 
 ---
 

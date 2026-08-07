@@ -1,0 +1,23 @@
+# dbt connection profile.
+#
+# This file is committed on purpose: it holds no secrets. Every value comes
+# from the environment, and the defaults match docker-compose.yaml, so a fresh
+# clone works with no editing at all.
+#
+# It is read both by the dbt container and by Airflow (dbt_runner.py sets
+# DBT_PROFILES_DIR to this directory); both receive .env via env_file.
+#
+# "host: postgres" is the compose service name. When running dbt from your own
+# machine instead of a container, override it: DBT_HOST=localhost
+cmc_pipeline:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('DBT_HOST', 'postgres') }}"
+      port: "{{ env_var('DBT_PORT', '5432') | int }}"
+      user: "{{ env_var('DBT_USER', 'airflow') }}"
+      pass: "{{ env_var('POSTGRES_PASSWORD', 'airflow') }}"
+      dbname: "{{ env_var('DBT_DATABASE', 'dwh') }}"
+      schema: "{{ env_var('DBT_SCHEMA', 'staging_layer') }}"
+      threads: 4
