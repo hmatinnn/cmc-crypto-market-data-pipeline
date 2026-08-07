@@ -80,10 +80,23 @@ jobs:
           script: |
             set -euo pipefail
             cd "${{ secrets.DEPLOY_PATH }}"
+
+            REF="${{ github.event.inputs.ref || 'main' }}"
+
+            # Update the checkout HERE, before deploy.sh is read by bash. The
+            # script used to do this itself, which meant any change to it only
+            # took effect on the following deploy - the running shell had
+            # already read the old file.
+            echo "Updating checkout to origin/$REF ..."
+            git fetch --prune origin
+            git checkout "$REF"
+            git reset --hard "origin/$REF"
+            echo "Now at: $(git rev-parse --short HEAD) $(git log -1 --pretty=%s)"
+
             # Invoked as "bash deploy/deploy.sh" rather than "./deploy/deploy.sh"
             # on purpose: Windows cannot store the executable bit, so the file may
             # arrive on the server with mode 644 and "./" would fail.
-            bash deploy/deploy.sh "${{ github.event.inputs.ref || 'main' }}"
+            bash deploy/deploy.sh
 
       - name: Deploy result
         if: always()

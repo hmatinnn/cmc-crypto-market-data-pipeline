@@ -211,7 +211,56 @@ del dockerignore               # PowerShell / cmd
 
 ---
 
-## 8. Next steps (optional)
+## 8. Decommissioning the server
+
+The VPS is temporary. Once it is cancelled, CD can no longer reach it and every
+push to `main` would leave a red ✗ on a public repository. Do this before
+shutting the server down.
+
+### 8.1 Capture the evidence first
+
+Once the server is gone the live UIs are gone with it. While it is still
+running, save the screenshots listed in `docs/screenshots/README.md`, then
+un-comment the Screenshots section in the main README.
+
+### 8.2 Stop CD from running automatically
+
+Edit `.github/workflows/cd.yml` and remove the `workflow_run` trigger, keeping
+only `workflow_dispatch`:
+
+```yaml
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag to deploy (default: main)"
+        required: false
+        default: main
+```
+
+The workflow stays visible in the repository — it still demonstrates the
+deployment design — but it never fires on its own, so CI stays the only thing
+gating `main`.
+
+### 8.3 Remove the credentials
+
+- `Settings → Secrets and variables → Actions`: delete `SSH_HOST`, `SSH_USER`,
+  `SSH_PRIVATE_KEY`, `DEPLOY_PATH` (and `SSH_PORT` if set).
+- `Settings → Deploy keys`: delete the server's key.
+- `Settings → Environments`: delete `production`.
+
+### 8.4 What still works afterwards
+
+CI is completely independent of the server: lint, 39 unit tests, dbt
+parse/compile, Docker builds, the DAG import check and the secret scan all run
+on GitHub-hosted runners. The badge stays green indefinitely.
+
+The stack also remains reproducible locally for anyone who clones the repo —
+see [Getting Started](README.md#getting-started).
+
+---
+
+## 9. Next steps (optional)
 
 - **Add `dbt test` to CI** — this needs seed data (`dbt/cmc_pipeline/seeds/` is currently empty).
 - **Run Soda data quality checks in CI** against sample data.

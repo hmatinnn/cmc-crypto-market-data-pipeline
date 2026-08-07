@@ -1,38 +1,34 @@
 #!/usr/bin/env bash
 #
-# Deploy script executed on the server. GitHub Actions (cd.yml) invokes it over
-# SSH, but it can also be run manually:
+# Deploys WHATEVER IS CURRENTLY CHECKED OUT in this directory. It deliberately
+# does not touch git.
 #
-#   cd /opt/coinmarket_pipeline_project && ./deploy/deploy.sh main
+# Updating the checkout is the caller's job:
+#
+#   - CI/CD: .github/workflows/cd.yml runs "git fetch && git reset --hard"
+#     over SSH and only then invokes this script.
+#   - By hand:
+#       cd /opt/coinmarket_pipeline_project
+#       git fetch origin && git reset --hard origin/main
+#       bash deploy/deploy.sh
+#
+# Why the split: this script used to run "git reset --hard" itself, which
+# rewrote its own file mid-execution. Bash reads a script lazily by byte
+# offset, so the running shell could resume at the wrong position. It also
+# meant a fix to this file only took effect on the NEXT deploy, because the
+# version that ran had been read before the checkout was updated.
 #
 # The .env file must be created MANUALLY on the server - it is not in the repo.
 
 set -euo pipefail
 
-# Step 2 below runs "git reset --hard", which rewrites THIS FILE while it is
-# still executing. Bash reads a script lazily by byte offset, so replacing the
-# file underneath a running shell can make it resume at the wrong position and
-# execute garbage. Re-exec from a private copy first, so the running code is
-# immune to the checkout.
-if [ "${DEPLOY_SELF_COPY:-0}" != "1" ]; then
-  DEPLOY_PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  export DEPLOY_PROJECT_DIR
-  SELF_COPY="$(mktemp)"
-  cp "${BASH_SOURCE[0]}" "$SELF_COPY"
-  export DEPLOY_SELF_COPY=1 DEPLOY_SELF_COPY_PATH="$SELF_COPY"
-  exec bash "$SELF_COPY" "$@"
-fi
-
-# Clean up the temporary copy of this script when we are done with it.
-trap 'rm -f "${DEPLOY_SELF_COPY_PATH:-}"' EXIT
-
-BRANCH="${1:-main}"
-PROJECT_DIR="${DEPLOY_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_DIR"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
-log "Deploy started | branch=$BRANCH | dir=$PROJECT_DIR"
+CURRENT_SHA="$(git rev-parse HEAD 2>/dev/null || echo 'unknown')"
+log "Deploy started | dir=$PROJECT_DIR | commit=$CURRENT_SHA"
 
 # --- 1. Pre-flight checks ---------------------------------------------------
 if [ ! -f .env ]; then
@@ -65,26 +61,11 @@ elif [ "$(grep -E '^AIRFLOW_UID=' .env | cut -d= -f2)" != "$CURRENT_UID" ]; then
   log "         If you hit permission errors, update it."
 fi
 
-# --- 2. Update the code -----------------------------------------------------
-PREV_SHA="$(git rev-parse HEAD)"
-log "Current commit: $PREV_SHA"
-
-git fetch --prune origin
-git checkout "$BRANCH"
-git reset --hard "origin/$BRANCH"
-
-NEW_SHA="$(git rev-parse HEAD)"
-log "New commit: $NEW_SHA"
-
-if [ "$PREV_SHA" = "$NEW_SHA" ]; then
-  log "No changes, but images will still be rebuilt (idempotent)."
-fi
-
-# --- 3. Build images --------------------------------------------------------
+# --- 2. Build images --------------------------------------------------------
 log "Building images..."
 docker compose build --pull
 
-# --- 4. Bring services up ---------------------------------------------------
+# --- 3. Bring services up ---------------------------------------------------
 # The DB migration is handled by the airflow-init service, which has
 # _AIRFLOW_DB_MIGRATE=true and runs automatically as part of "up".
 # (Do not call "docker compose run airflow-cli" here - that service sits behind
@@ -101,7 +82,7 @@ log "Updating services..."
 # Normal path: a plain "up" with no downtime. If a name conflict does happen,
 # free only the names Docker actually complained about and try once more.
 UP_LOG="$(mktemp)"
-trap 'rm -f "$UP_LOG" "${DEPLOY_SELF_COPY_PATH:-}"' EXIT
+trap 'rm -f "$UP_LOG"' EXIT
 
 # Docker aborts on the FIRST name it cannot claim, so one conflict is reported
 # per attempt. With five pinned container_names that means up to five rounds -
@@ -157,7 +138,7 @@ done
 log "Waiting for airflow-init to finish (DB migration)..."
 docker compose wait airflow-init >/dev/null 2>&1 || true
 
-# --- 5. Health check --------------------------------------------------------
+# --- 4. Health check --------------------------------------------------------
 log "Waiting 45s for services to come up..."
 sleep 45
 
@@ -203,15 +184,15 @@ if [ -n "$UNHEALTHY" ]; then
   echo "$UNHEALTHY"
   echo
   docker compose ps --all
-  log "To roll back: git reset --hard $PREV_SHA && bash deploy/deploy.sh"
+  log "To roll back: git reset --hard <previous-sha> && bash deploy/deploy.sh"
   exit 1
 fi
 
 log "All services are healthy:"
 docker compose ps
 
-# --- 6. Cleanup -------------------------------------------------------------
+# --- 5. Cleanup -------------------------------------------------------------
 log "Pruning old images..."
 docker image prune -f
 
-log "Deploy completed successfully | $NEW_SHA"
+log "Deploy completed successfully | $CURRENT_SHA"
