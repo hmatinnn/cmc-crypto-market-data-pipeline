@@ -15,7 +15,13 @@ feature/* ──PR──> dev ──PR──> main ──> production server
 ```
 
 - **CI** (`.github/workflows/ci.yml`) — runs on every push and PR to `dev` and `main`.
-- **CD** (`.github/workflows/cd.yml`) — runs only on push to `main` (or manually), and waits for CI to finish.
+- **CD** (`.github/workflows/cd.yml`) — triggered by the `workflow_run` event: it
+  starts automatically once the **CI workflow finishes successfully on `main`**,
+  and can also be started by hand via *Run workflow*.
+
+> `workflow_run` only fires for the copy of `cd.yml` that lives on the **default
+> branch**. Changes to CD therefore take effect only after they are merged into
+> `main`.
 
 ---
 
