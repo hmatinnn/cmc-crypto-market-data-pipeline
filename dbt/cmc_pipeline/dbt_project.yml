@@ -42,3 +42,6 @@ models:
     olap:
       +materialized: table
       +schema: olap
+    analytics:
+      +materialized: view
+      +schema: analytics

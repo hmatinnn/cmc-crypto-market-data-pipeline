@@ -1,7 +1,7 @@
 import os
+import sys  # noqa: F401  - tests monkeypatch mod.sys.argv
 import json
 import ssl
-import sys
 import argparse
 import urllib.parse
 import urllib.request
@@ -34,20 +34,48 @@ class CoinMarketCapClient:
         }
         self.ssl_context = ssl.create_default_context(cafile=certifi.where())
 
+
+    
+    RATE_LIMIT_RESET_SECONDS = 65
+    MAX_RATE_LIMIT_RETRIES = 5
+
     def _get(self, endpoint: str, params: dict = None) -> dict:
         query_string = urllib.parse.urlencode(params) if params else ""
         url = f"{self.base_url}{endpoint}?{query_string}"
-        req = urllib.request.Request(url, headers=self.headers, method='GET')
 
-        try:
-            with urllib.request.urlopen(req, context=self.ssl_context) as response:
-                if response.getcode() == 200:
-                    return json.loads(response.read().decode('utf-8'))
-        except urllib.error.HTTPError as e:
-            error_msg = e.read().decode('utf-8', errors='ignore')
-            print(f"HTTP Error ({e.code}) on {endpoint}: {error_msg}")
-        except Exception as e:
-            print(f"Unexpected error on {endpoint}: {str(e)}")
+        for attempt in range(1, self.MAX_RATE_LIMIT_RETRIES + 1):
+            req = urllib.request.Request(url, headers=self.headers, method='GET')
+            try:
+                with urllib.request.urlopen(req, context=self.ssl_context) as response:
+                    if response.getcode() == 200:
+                        return json.loads(response.read().decode('utf-8'))
+            except urllib.error.HTTPError as e:
+                error_msg = e.read().decode('utf-8', errors='ignore')
+                if e.code == 429:
+
+                   
+                    retry_after = e.headers.get("Retry-After") if e.headers else None
+                    try:
+                        wait_seconds = float(retry_after) if retry_after else self.RATE_LIMIT_RESET_SECONDS
+                    except ValueError:
+                        wait_seconds = self.RATE_LIMIT_RESET_SECONDS
+
+                    if attempt < self.MAX_RATE_LIMIT_RETRIES:
+                        print(
+                            f"HTTP Error (429) on {endpoint}: {error_msg} -- "
+                            f"retrying in {wait_seconds:.0f}s (attempt {attempt}/{self.MAX_RATE_LIMIT_RETRIES})"
+                        )
+                        time.sleep(wait_seconds)
+                        continue
+                    print(
+                        f"HTTP Error (429) on {endpoint}: {error_msg} -- "
+                        f"giving up after {self.MAX_RATE_LIMIT_RETRIES} attempts"
+                    )
+                else:
+                    print(f"HTTP Error ({e.code}) on {endpoint}: {error_msg}")
+            except Exception as e:
+                print(f"Unexpected error on {endpoint}: {str(e)}")
+            return None
         return None
 
     def save_to_json(self, data: dict, filename: str):
@@ -61,11 +89,8 @@ class CoinMarketCapClient:
 
     def get_crypto_map(self, limit: int = 500) -> dict:
         print(f"Fetching cryptocurrency map (limit: {limit})...")
-        # sort=cmc_rank aligns this endpoint's coin population with
-        # get_latest_listings (also ranked by market cap). Without this,
-        # /v1/cryptocurrency/map defaults to sort=id, which returns the
-        # first 500 coins ever listed on CMC -- a mostly disjoint set from
-        # the current top-500-by-market-cap used everywhere else.
+
+   
         params = {"listing_status": "active", "start": 1, "limit": limit, "sort": "cmc_rank"}
         return self._get("/v1/cryptocurrency/map", params)
 
@@ -183,18 +208,14 @@ def fetch_info(chunk_size: int = 500):
     cmc.save_to_json(payload, "v2_cryptocurrency_info.json")
 
 
-# CMC's fixed internal currency id for USD. Stable/well-known constant --
-# see https://coinmarketcap.com/api/documentation (fiat currency ids don't
-# change), used below since we only ever convert to USD.
+
+
 USD_QUOTE_CURRENCY_ID = 2781
 
 
 def fetch_quotes(limit: int = 500):
-    # limit used to be capped at 400 because /v3/cryptocurrency/quotes/latest
-    # had a free-tier max of 400 ids per request. That call no longer
-    # happens -- this now just slices the already-fetched listings data --
-    # so the cap should match fetch_listings's own limit (500), not be
-    # stuck below it and silently drop quote data for ranks 401-500.
+
+
 
     listings_path = os.path.join(INPUT_DIR, "v1_cryptocurrency_listings_latest.json")
     if not os.path.exists(listings_path):

@@ -1,0 +1,43 @@
+# NOTE: the previous file was named "dockerignore" (no leading dot), so Docker
+# never read it and the build context included .venv/ (243MB), logs/,
+# api_responses/ and similar directories. This file replaces it.
+
+.git
+.gitignore
+.gitattributes
+.github
+.dockerignore
+dockerignore
+
+# Virtual environments
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Secrets
+.env
+secrets/
+
+# Logs and artifacts
+logs/
+*.log
+.pytest_cache/
+dbt/cmc_pipeline/logs/
+dbt/cmc_pipeline/target/
+dbt/cmc_pipeline/target_daily/
+dbt/cmc_pipeline/target_weekly/
+dbt/cmc_pipeline/target_monthly/
+dbt/cmc_pipeline/dbt_packages/
+dbt/logs/
+
+# Local data
+api_responses/
+api_responses_csv/
+notebooks/
+
+# Docs and images
+*.png
+*.jpg
+README.md
+CI_CD.md

@@ -1,7 +1,0 @@
-.git
-.gitgnore
-
-venv/
-.venv/
-
-*.log

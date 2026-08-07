@@ -1,11 +1,8 @@
-from operator import index
 import os
+import sys
 import json
-import certifi
-from dotenv import load_dotenv
 import pandas as pd
-import time
-from datetime import datetime, timezone
+from datetime import datetime
 
 
 pd.set_option("display.max_columns", None)
@@ -193,6 +190,13 @@ class CryptoDataParser:
         },
     }
 
+
+    GROUPS = {
+        "daily": ["listing_latest", "quotes"],
+        "weekly": ["categories", "category_details"],
+        "monthly": ["map", "info"],
+    }
+
     def __init__(self, config: dict = None):
         self.config = config or self.CONFIG
         self.dfs: dict[str, pd.DataFrame] = {}
@@ -221,8 +225,14 @@ class CryptoDataParser:
         df = df.drop(columns=cfg.get("exclude_cols", []), errors="ignore")
         return df
 
-    def parse_all(self) -> dict[str, pd.DataFrame]:
-        for name, cfg in self.config.items():
+    def parse_all(self, only: list = None) -> dict[str, pd.DataFrame]:
+        """only: optional list of dataset names (CONFIG keys) to restrict
+        parsing to -- e.g. GROUPS["daily"]. Defaults to every dataset."""
+        items = self.config.items()
+        if only is not None:
+            items = [(name, self.config[name]) for name in only if name in self.config]
+
+        for name, cfg in items:
             try:
                 self.dfs[name] = self._parse_one(name, cfg)
                 print(
@@ -240,18 +250,7 @@ class CryptoDataParser:
             raise KeyError(f"'{name}' not parsed yet - call parse_all() first.")
         return self.dfs[name]
 
-    # def save_to_csv(self, OUTPUT_DIR: str = "silver_csv", index: bool = False):
-    #     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    #     for name, df in self.dfs.items():
-    #         filepath = os.path.join(OUTPUT_DIR, f"{name}.csv")
-    #         df.to_csv(filepath, index=index, encoding="utf-8")
-    #         print(f"Saved '{name}' -> {filepath} ({len(df)} rows)")
 
-    # Natural key per historical table, used to compare a fresh parse against
-    # the last recorded snapshot so a stale re-fetch (e.g. categories/
-    # category_details only actually change @weekly, but this parser runs
-    # @daily for every dataset) doesn't append a duplicate row with a new
-    # inserted_at every day it happens to re-run against unchanged source JSON.
     KEY_COLUMNS = {
         "categories": ["id"],
         "category_details": ["id", "coins_id"],
@@ -329,9 +328,15 @@ class CryptoDataParser:
                 df.to_csv(filepath, index=index, encoding="utf-8")
                 print(f"Saved '{name}' -> {filepath} ({len(df)} rows, overwritten)")
 
-def main():
+def main(group: str = None):
+    """group: "daily" | "weekly" | "monthly" | None. Restricts parsing to
+    that cadence's datasets (CryptoDataParser.GROUPS). None parses everything."""
     parser = CryptoDataParser()
-    dfs = parser.parse_all()
+    only = CryptoDataParser.GROUPS.get(group) if group else None
+    if group and only is None:
+        raise ValueError(f"Unknown group {group!r}; expected one of {list(CryptoDataParser.GROUPS)}")
+
+    dfs = parser.parse_all(only=only)
 
     if not dfs:
         raise RuntimeError("No datasets were parsed - check Bronze JSON files exist.")
@@ -341,4 +346,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    main(sys.argv[1] if len(sys.argv) > 1 else None)

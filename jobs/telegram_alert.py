@@ -70,7 +70,9 @@
 
 
 import os
+import html
 import requests
+from datetime import datetime, timezone
 
 # Telegram credentials
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
@@ -78,12 +80,24 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 
 def send_telegram_message(message: str):
-    """Telegram-a mesaj göndərən ana funksiya (Markdown dəstəyi ilə)"""
+    """Telegram-a mesaj göndərən ana funksiya (HTML dəstəyi ilə).
+
+    parse_mode was previously "Markdown" (Telegram's legacy V1 parser).
+    V1 is notoriously fragile: a single underscore anywhere in the message
+    can desync its entity parser for the *rest* of the message. Our dag_id/
+    task_id values (e.g. cmc_weekly_categories_fetch_pipeline) are full of
+    underscores, which silently corrupted the `[View Logs](url)` link into
+    plain, non-clickable text -- the whole message still "looked" fine
+    (bold/code spans rendered) but the link entity just never got created.
+    HTML mode doesn't have this problem; callers must html.escape() any
+    dynamic text they interpolate (see send_dag_failure_alert/send_soda_alert).
+    """
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
         "chat_id": TELEGRAM_CHAT_ID,
         "text": message,
-        "parse_mode": "Markdown",  
+        "parse_mode": "HTML",
+        "disable_web_page_preview": True,
     }
     response = requests.post(url, json=payload)
     response.raise_for_status()
@@ -119,9 +133,13 @@ def _extract_table_name(check) -> str:
 
 def send_dag_failure_alert(context):
     dag_id = context["dag"].dag_id
-    task_id = context["task_instance"].task_id
-    log_url = context["task_instance"].log_url
+    task_instance = context["task_instance"]
+    task_id = task_instance.task_id
+    log_url = task_instance.log_url
     exception = context.get("exception")
+
+
+    failed_at = task_instance.end_date or datetime.now(timezone.utc)
 
     try:
         logical_date = context.get("logical_date")
@@ -131,12 +149,13 @@ def send_dag_failure_alert(context):
         logical_date = "N/A"
 
     message = (
-        f"*DAG FAIL*\n"
-        f"*DAG:* `{dag_id}`\n"
-        f"*Task:* `{task_id}`\n"
-        f"*Time:* `{logical_date}`\n"
-        f"*Error:* `{str(exception)[:300]}`\n"
-        f"[View Logs]({log_url})"
+        f"<b>DAG FAIL</b>\n"
+        f"<b>DAG:</b> <code>{html.escape(str(dag_id))}</code>\n"
+        f"<b>Task:</b> <code>{html.escape(str(task_id))}</code>\n"
+        f"<b>Failed At:</b> <code>{html.escape(str(failed_at))}</code>\n"
+        f"<b>Scheduled For:</b> <code>{html.escape(str(logical_date))}</code>\n"
+        f"<b>Error:</b> <code>{html.escape(str(exception)[:300])}</code>\n"
+        f'<a href="{html.escape(log_url)}">View Logs</a>'
     )
     try:
         send_telegram_message(message)
@@ -145,7 +164,7 @@ def send_dag_failure_alert(context):
 
 
 def send_soda_alert(scan):
-    """Soda DQ xətalarını qruplaşdırıb Telegram-a göndərir"""
+
     if not scan.has_checks_warn_or_fail():
         return
 
@@ -156,11 +175,11 @@ def send_soda_alert(scan):
         table = _extract_table_name(c)
         grouped.setdefault(table, []).append(c.name)
 
-    lines = ["*SODA DQ ALERT*"]
+    lines = ["<b>SODA DQ ALERT</b>"]
     for table, checks in grouped.items():
-        lines.append(f"\n*Table:* `{table}`")
+        lines.append(f"\n<b>Table:</b> <code>{html.escape(str(table))}</code>")
         for check_name in checks:
-            lines.append(f"  - {check_name}")
+            lines.append(f"  - {html.escape(str(check_name))}")
 
     message = "\n".join(lines)
     try:

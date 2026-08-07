@@ -1,0 +1,28 @@
+# Ruff configuration - used by CI for linting.
+# Docs: https://docs.astral.sh/ruff/
+
+target-version = "py311"
+line-length = 120
+
+exclude = [
+    ".venv",
+    ".git",
+    "__pycache__",
+    "dbt/cmc_pipeline/target",
+    "dbt/cmc_pipeline/target_daily",
+    "dbt/cmc_pipeline/target_weekly",
+    "dbt/cmc_pipeline/target_monthly",
+    "notebooks",
+    "logs",
+]
+
+[lint]
+# Blocking rules: syntax errors, undefined names, unused imports.
+# Style rules (W, E5, I) are not blocking yet - they are reported as
+# warnings in the "style" step.
+select = ["E4", "E7", "E9", "F"]
+ignore = []
+
+[lint.per-file-ignores]
+# Functions declared via decorators in Airflow DAG files may look "unused".
+"dags/*.py" = ["F401"]

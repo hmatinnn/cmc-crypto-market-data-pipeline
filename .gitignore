@@ -6,6 +6,14 @@ api_responses_csv/
 __pycache__/
 secrets/*.json
 
+# Airflow generates this file itself and writes fernet_key / secret_key /
+# jwt_secret into it. Every meaningful setting is already supplied through
+# AIRFLOW__* environment variables in docker-compose.yaml, so the file must not
+# be committed.
+config/airflow.cfg
+config/*.cfg
+!config/.gitkeep
+
 dbt/cmc_pipeline/profiles.yml
 dbt/cmc_pipeline/target/
 dbt/cmc_pipeline/target_daily/
