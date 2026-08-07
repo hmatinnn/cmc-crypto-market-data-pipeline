@@ -1,5 +1,11 @@
 # CoinMarketCap Data Pipeline
 
+[![CI](https://github.com/hmatinnn/cmc-crypto-market-data-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/hmatinnn/cmc-crypto-market-data-pipeline/actions/workflows/ci.yml)
+![Airflow](https://img.shields.io/badge/Airflow-3.2-017CEE?logo=apacheairflow&logoColor=white)
+![dbt](https://img.shields.io/badge/dbt-Postgres-FF694B?logo=dbt&logoColor=white)
+![Postgres](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
+
 An end-to-end **ELT data platform** that ingests cryptocurrency market data from the [CoinMarketCap Pro API](https://coinmarketcap.com/api/), lands it in a PostgreSQL data warehouse following the **medallion architecture**, models it into a **star schema with dbt**, validates it with **Soda**, and serves it through **Apache Superset** dashboards — all orchestrated by **Apache Airflow** and fully containerized with **Docker Compose**. Deployed on a Linux (Ubuntu) VPS with a **GitHub Actions CI/CD** pipeline.
 
 ![Overall Architecture](cmc_overall_architecture.png)
@@ -8,6 +14,7 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 
 ## Table of Contents
 
+- [Screenshots](#screenshots)
 - [Why this design](#why-this-design)
 - [Architecture](#architecture)
 - [Data Source](#data-source)
@@ -21,6 +28,31 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
 - [Tech Stack](#tech-stack)
+
+---
+
+## Screenshots
+
+<!--
+  Save the images into docs/screenshots/ with exactly these names and they will
+  appear here. Suggested captures, taken while the stack is running:
+
+    airflow-dags.png       Airflow home with the cmc_* pipelines enabled and green
+    airflow-graph.png      Graph view of one cadence chain (fetch -> parse -> load -> dbt)
+    superset-overview.png  The market overview dashboard
+    grafana-monitoring.png Freshness / row count / DAG status panels
+    ci-run.png             A green GitHub Actions run showing all six jobs
+-->
+
+| Airflow — pipelines | Airflow — one cadence chain |
+|---|---|
+| ![Airflow DAGs](docs/screenshots/airflow-dags.png) | ![Airflow graph](docs/screenshots/airflow-graph.png) |
+
+| Superset — market overview | Grafana — pipeline health |
+|---|---|
+| ![Superset](docs/screenshots/superset-overview.png) | ![Grafana](docs/screenshots/grafana-monitoring.png) |
+
+![CI run](docs/screenshots/ci-run.png)
 
 ---
 
@@ -151,18 +183,55 @@ Additionally, **dbt schema tests** (`schema.yml`) validate model-level constrain
 ## CI/CD & Deployment
 
 ```
-git push ──► GitHub Actions ──► pytest + dbt compile ──► docker build & push ──► deploy to VPS ──► docker compose up -d ──► Telegram notify
+feature/* ──PR──► dev ──PR──► main ──► Ubuntu VPS
+              │          │        │
+              │          │        └── CD: SSH deploy, docker compose up -d
+              └── CI ────┘
 ```
 
-- **CI** — every push runs the pytest suite and compiles the dbt project.
-- **CD** — on merge to `main`, images are built and shipped to the **Ubuntu VPS**, where Docker Compose brings the stack up. The VPS runs 24/7 so schedules fire on time.
-- Secrets (API key, DB passwords, bot token) live in GitHub Actions Secrets and the server-side `.env` — never in git.
+### CI — six parallel jobs on every push and pull request
+
+| Job | What it verifies | Typical runtime |
+|---|---|---|
+| **Lint (ruff)** | Syntax errors, undefined names, dead imports. Also blocks CRLF line endings and missing executable bits — the project is developed on Windows but runs on Linux. | ~10s |
+| **Unit tests (pytest)** | 39 tests against a mocked CoinMarketCap client: request building, rate-limit retries, pagination, error paths, CLI dispatch. | ~30s |
+| **dbt parse & compile** | Spins up an ephemeral Postgres and compiles every model, so a broken `ref()`, malformed YAML or Jinja error never reaches `main`. | ~50s |
+| **Docker build & DAG import** | Builds all three images (airflow, dbt, soda), then parses every DAG *inside the real Airflow image* via `DagBag` — catching import errors that only surface at runtime. | ~3.5m |
+| **Secret scan** | `gitleaks` over the full git history, plus a hard check that `.env` is never tracked. | ~8s |
+| **CI OK** | Aggregation gate — the single required status check for branch protection. | ~5s |
+
+> The secret scan earned its place on day one: it found three Airflow secrets
+> (`fernet_key`, `secret_key`, `jwt_secret`) that had been committed inside a
+> generated `config/airflow.cfg`. The file was purged from history, the keys were
+> rotated, and the path is now gitignored.
+
+### CD — deploy on merge to `main`
+
+`deploy/deploy.sh` runs on the VPS over SSH and is written to be safe to re-run:
+
+- refuses to start if `.env` is missing, and strips CRLF from it (a `.env` copied from Windows would otherwise produce `API_KEY=abc\r`)
+- pins `AIRFLOW_UID` to the host user, so bind-mounted `logs/` and `dags/` don't end up owned by root
+- rebuilds images, waits for `airflow-init` to finish the DB migration, then brings the stack up
+- health-checks every container afterwards, correctly treating one-shot init containers as healthy when they exit 0
+- prints the previous commit SHA for a one-line rollback
+
+`deploy/server-setup.sh` prepares a fresh VPS once: non-root `deploy` user, docker group, 4GB swap, project directory.
+
+Secrets (API key, DB passwords, bot token, SSH key) live in GitHub Actions Secrets and the server-side `.env` — never in git.
 
 ---
 
 ## Project Structure
 
 ```
+├── .github/workflows/           # CI/CD
+│   ├── ci.yml                   #   lint, tests, dbt, docker, DAG import, secret scan
+│   └── cd.yml                   #   deploy to VPS on merge to main
+├── ci/check_dags.py             # DAG import checker (runs inside the airflow image)
+├── deploy/
+│   ├── server-setup.sh          #   one-time VPS prep (user, swap, dirs)
+│   ├── init-env.sh              #   interactive .env bootstrap
+│   └── deploy.sh                #   idempotent deploy + health check
 ├── dags/                        # Airflow DAGs
 │   ├── cmc_api_dag.py           #   fetch pipelines (daily/weekly/monthly)
 │   ├── cmc_cripto_parser_dag.py #   parse pipelines (JSON → CSV)

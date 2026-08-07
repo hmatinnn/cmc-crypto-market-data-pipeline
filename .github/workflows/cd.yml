@@ -1,7 +1,15 @@
 name: CD (deploy to server)
 
+# CD does not poll for CI: GitHub can trigger a workflow when another one
+# finishes. "workflow_run" fires once the CI workflow completes on main, and the
+# job below only proceeds when its conclusion was success.
+#
+# This replaces an earlier wait-on-check-action step, which needed a "checks:
+# read" token permission and installed a Ruby toolchain on every run.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
     inputs:
@@ -18,32 +26,31 @@ permissions:
   contents: read
 
 jobs:
-  # Precondition for CD: CI must have passed.
-  # (on push to main the CI workflow runs in parallel, so we wait for it here)
-  wait-for-ci:
-    name: Wait for CI
-    runs-on: ubuntu-latest
-    steps:
-      - name: Wait for CI workflow
-        uses: lewagon/wait-on-check-action@v1.3.4
-        with:
-          ref: ${{ github.sha }}
-          check-name: "CI OK"
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 15
-          allowed-conclusions: success
-
   deploy:
     name: Deploy
-    needs: wait-for-ci
     runs-on: ubuntu-latest
-    # Create a "production" environment under
-    # Settings -> Environments and add "Required reviewers" if you want each
-    # deploy to wait for your manual approval.
+
+    # Manual runs always proceed; automatic runs only after a green CI.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    # Create a "production" environment under Settings -> Environments and add
+    # "Required reviewers" if every deploy should wait for manual approval.
     environment:
       name: production
 
+    env:
+      DEPLOY_REF: ${{ github.event.inputs.ref || 'main' }}
+
     steps:
+      - name: Show what triggered this deploy
+        run: |
+          echo "event      : ${{ github.event_name }}"
+          echo "deploy ref : $DEPLOY_REF"
+          echo "CI result  : ${{ github.event.workflow_run.conclusion || 'n/a (manual run)' }}"
+          echo "commit     : ${{ github.event.workflow_run.head_sha || github.sha }}"
+
       - name: Verify required secrets exist
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -82,7 +89,7 @@ jobs:
         if: always()
         run: |
           if [ "${{ job.status }}" = "success" ]; then
-            echo "Deploy succeeded: ${{ github.sha }}"
+            echo "Deploy succeeded: $DEPLOY_REF"
           else
             echo "::error::Deploy failed - check the server with 'docker compose ps'."
           fi
