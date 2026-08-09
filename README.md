@@ -278,6 +278,7 @@ Secrets (API key, DB passwords, bot token, SSH key) live in GitHub Actions Secre
 ├── soda/                        # Soda config + checks.yml (+ Dockerfile)
 ├── superset/                    # Superset image, config, dashboard spec
 ├── grafana/                     # Grafana SQL panel queries
+├── docs/                        # architecture diagrams, screenshots, write-ups
 ├── pytest/                      # unit tests
 ├── api_responses/               # Bronze: raw JSON (gitignored)
 ├── api_responses_csv/           # Silver: parsed CSV (gitignored)

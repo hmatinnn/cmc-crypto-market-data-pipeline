@@ -12,7 +12,6 @@ exclude = [
     "dbt/cmc_pipeline/target_daily",
     "dbt/cmc_pipeline/target_weekly",
     "dbt/cmc_pipeline/target_monthly",
-    "notebooks",
     "logs",
 ]
 

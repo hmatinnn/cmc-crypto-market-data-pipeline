@@ -34,10 +34,10 @@ dbt/logs/
 # Local data
 api_responses/
 api_responses_csv/
-notebooks/
 
 # Docs and images
 *.png
 *.jpg
+docs/
 README.md
 CI_CD.md
