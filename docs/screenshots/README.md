@@ -20,6 +20,14 @@ matching row to the Screenshots section of the root `README.md`.
 | `ci-01-github-actions-ci.png` | Green CI workflow runs |
 | `ci-02-github-actions-cd.png` | Green CD (deploy to server) workflow runs |
 
+Architecture diagrams (not screenshots, but referenced from the same folder):
+
+| File | What it shows |
+|---|---|
+| `cmc_overall_architecture.png` | End-to-end system architecture |
+| `cmc_elt_architecture_diagram.png` | ELT flow: API → JSON → CSV → staging → dbt marts |
+| `cmc_dwh_modeling_diagram.png` | Warehouse star-schema model |
+
 Take these **while the VPS is still running** — once it is decommissioned the
 live UIs are gone, but the screenshots keep the project presentable.
 

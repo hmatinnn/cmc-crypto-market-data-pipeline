@@ -8,7 +8,7 @@
 
 An end-to-end **ELT data platform** that ingests cryptocurrency market data from the [CoinMarketCap Pro API](https://coinmarketcap.com/api/), lands it in a PostgreSQL data warehouse following the **medallion architecture**, models it into a **star schema with dbt**, validates it with **Soda**, and serves it through **Apache Superset** dashboards — all orchestrated by **Apache Airflow** and fully containerized with **Docker Compose**. Deployed on a Linux (Ubuntu) VPS with a **GitHub Actions CI/CD** pipeline.
 
-![Overall Architecture](cmc_overall_architecture.png)
+![Overall Architecture](docs/screenshots/cmc_overall_architecture.png)
 
 ---
 
@@ -112,7 +112,7 @@ A single `Monitoring` dashboard fed by the warehouse itself — every panel is a
 
 Detailed ELT process view:
 
-![ELT Process](cmc_elt_architecture_diagram.png)
+![ELT Process](docs/screenshots/cmc_elt_architecture_diagram.png)
 
 **Runtime (all in Docker Compose):**
 
@@ -153,7 +153,7 @@ Setup DAGs (`create_schemas_dag`, `create_staging_tables_dag`) provision the war
 
 ## Warehouse Modeling
 
-![DWH Model](cmc_dwh_modeling_diagram.png)
+![DWH Model](docs/screenshots/cmc_dwh_modeling_diagram.png)
 
 dbt models flow through three internal stages:
 
