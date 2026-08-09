@@ -1,101 +1,101 @@
-# CMC Crypto Analytics — Superset Dashboard Spesifikasiyası
+# CMC Crypto Analytics — Superset Dashboard Specification
 
-Bir dashboard, 4 tab. Bütün chartlar dbt-nin `analytics` schema-sındakı view-lara oturur
+One dashboard, 4 tabs. All charts sit on top of the views in dbt's `analytics` schema
 (`vw_market_overview_daily`, `vw_coin_explorer`, `vw_sector_performance`, `vw_coin_momentum_daily`).
 
-**Data mənbəyi qaydası:** cari vəziyyət → `olap` əsaslı view-lar (`vw_coin_explorer`,
-`vw_sector_performance`); tarixi trend → staging əsaslı view-lar (`vw_market_overview_daily`,
+**Data source rule:** current state → `olap`-based views (`vw_coin_explorer`,
+`vw_sector_performance`); historical trend → staging-based views (`vw_market_overview_daily`,
 `vw_coin_momentum_daily`).
 
-**Aqreqat qeydi:** `vw_coin_explorer` (1 sətir/coin) və `vw_sector_performance`
-(1 sətir/kateqoriya) onsuz da aqreqatlıdır — Superset metrik tələb edəndə `MAX(...)`
-yaz, nəticəni dəyişmir, sadəcə sintaksis tələbidir.
+**Note on aggregation:** `vw_coin_explorer` (1 row/coin) and `vw_sector_performance`
+(1 row/category) are already aggregated — when Superset requires a metric, write `MAX(...)`.
+It does not change the result, it is only a syntax requirement.
 
 ---
 
 ## Tab 1 — Market Overview
 
-**Dataset:** `analytics.vw_market_overview_daily` (grain: 1 sətir / gün)
+**Dataset:** `analytics.vw_market_overview_daily` (grain: 1 row / day)
 
-| Chart | Superset tipi | X-Axis | Metrics | Dimensions |
+| Chart | Superset type | X-Axis | Metrics | Dimensions |
 |---|---|---|---|---|
 | Total Market Cap | Big Number w/ Trendline | Time column: `snapshot_date` | `MAX(total_market_cap)` | — |
 | 24h Volume | Big Number w/ Trendline | `snapshot_date` | `MAX(total_volume_24h)` | — |
 | BTC Dominance | Big Number w/ Trendline | `snapshot_date` | `MAX(btc_dominance_pct)` | — |
 | Top-10 Share | Big Number w/ Trendline | `snapshot_date` | `MAX(top10_market_cap_share)` (% format) | — |
-| Market Cap trendi | Line Chart | `snapshot_date` | `MAX(total_market_cap)` | — |
+| Market Cap trend | Line Chart | `snapshot_date` | `MAX(total_market_cap)` | — |
 | BTC Dom. vs Top-10 | Mixed Time-series | `snapshot_date` | Query A: `MAX(btc_dominance_pct)`, Query B: `MAX(top10_market_cap_share)` | — |
-| CEX vs DEX həcm | Area Chart (stacked) | `snapshot_date` | `MAX(total_cex_volume_24h)`, `MAX(total_dex_volume_24h)` | — |
-| DEX payı trendi | Line Chart | `snapshot_date` | `MAX(dex_volume_share)` | — |
+| CEX vs DEX volume | Area Chart (stacked) | `snapshot_date` | `MAX(total_cex_volume_24h)`, `MAX(total_dex_volume_24h)` | — |
+| DEX share trend | Line Chart | `snapshot_date` | `MAX(dex_volume_share)` | — |
 
 ---
 
 ## Tab 2 — Coin Explorer
 
-**Dataset:** `analytics.vw_coin_explorer` (grain: 1 sətir / coin)
-**Filter:** dashboard filter — `coin_symbol`, cross-filtering aktiv.
+**Dataset:** `analytics.vw_coin_explorer` (grain: 1 row / coin)
+**Filter:** dashboard filter — `coin_symbol`, cross-filtering enabled.
 
-### Top-100 cədvəl — Table
-- Query Mode: **Raw Records** (metrik lazım deyil)
+### Top-100 table — Table
+- Query Mode: **Raw Records** (no metric needed)
 - Columns: `cmc_rank`, `coin_symbol`, `coin_name`, `price`, `percent_change_1h`,
   `percent_change_24h`, `percent_change_7d`, `percent_change_30d`, `market_cap`, `volume_24h`
 - Sort: `cmc_rank` ASC, Row limit: 100
-- Customize → Conditional Formatting: bütün `percent_change_*` sütunlarına qırmızı-yaşıl
+- Customize → Conditional Formatting: red-green scale on all `percent_change_*` columns
 
 ### MC vs Volume — Bubble Chart
-(Supersetdə scatter üçün doğru tip **Bubble Chart**-dır: x və y hər ikisi metrikdir)
+(In Superset the correct type for a scatter plot is **Bubble Chart**: both x and y are metrics)
 - Entity: `coin_symbol`
 - X Axis: `MAX(market_cap)`
 - Y Axis: `MAX(volume_24h)`
 - Bubble Size: `MAX(market_cap)`
-- Series: — (boş saxla)
-- Customize: hər iki ox **Log Scale**
+- Series: — (leave empty)
+- Customize: **Log Scale** on both axes
 - Row limit: 500
 
 ### FDV/MC Top-20 — Bar Chart (horizontal)
 - X-Axis (dimension): `coin_symbol`
 - Metrics: `MAX(fdv_mc_ratio)`
-- Filters: `market_cap > 100000000` (kiçik coinlərdə səs-küy)
-- Sort by: metrik DESC, Row limit: 20
+- Filters: `market_cap > 100000000` (small coins are noisy)
+- Sort by: metric DESC, Row limit: 20
 
 ### Supply Utilization — Bar Chart
 - X-Axis: `coin_symbol`
 - Metrics: `MAX(supply_utilization)`
 - Filters: `is_infinite_supply = false`, `max_supply IS NOT NULL`
-- Sort by: metrik DESC (və ya ASC — hansı ucu göstərmək istəyirsənsə), Row limit: 20
+- Sort by: metric DESC (or ASC — whichever end you want to show), Row limit: 20
 
 ### MC/TVL (DeFi) — Table
 - Query Mode: Raw Records
 - Columns: `coin_symbol`, `coin_name`, `tvl`, `market_cap`, `mc_tvl_ratio`
 - Filters: `tvl IS NOT NULL`
-- Sort: `mc_tvl_ratio` ASC (aşağı nisbət = TVL-ə görə "ucuz"), Row limit: 50
+- Sort: `mc_tvl_ratio` ASC (lower ratio = "cheap" relative to TVL), Row limit: 50
 
 ---
 
 ## Tab 3 — Sectors
 
-**Dataset:** `analytics.vw_sector_performance` (grain: 1 sətir / kateqoriya)
+**Dataset:** `analytics.vw_sector_performance` (grain: 1 row / category)
 
-### Sektor xəritəsi — Treemap
+### Sector map — Treemap
 - Dimensions: `category_name`
 - Metric (size): `MAX(market_cap)`
 - Row limit: 50
 
-### Narrativ performansı 7d — Bar Chart (horizontal)
+### Narrative performance 7d — Bar Chart (horizontal)
 - X-Axis (dimension): `category_name`
 - Metrics: `MAX(avg_change_7d_pct)`
-- Sort by: metrik DESC, Row limit: 20
-- Customize: müsbət/mənfi bar rəngi (positive/negative color)
+- Sort by: metric DESC, Row limit: 20
+- Customize: positive/negative bar colors
 
-### Narrativ performansı 30d — Bar Chart
-- Eyni konfiq, Metrics: `MAX(avg_change_30d_pct)`
+### Narrative performance 30d — Bar Chart
+- Same config, Metrics: `MAX(avg_change_30d_pct)`
 
-### Sektor həcmi — Bar Chart
+### Sector volume — Bar Chart
 - X-Axis: `category_name`
 - Metrics: `MAX(volume_24h)`
-- Sort by: metrik DESC, Row limit: 15
+- Sort by: metric DESC, Row limit: 15
 
-### Sektor detalları — Table
+### Sector details — Table
 - Query Mode: Raw Records
 - Columns: `category_name`, `num_coins`, `market_cap`, `avg_change_24h_pct`, `mc_tvl_ratio`
 - Sort: `market_cap` DESC
@@ -104,9 +104,9 @@ yaz, nəticəni dəyişmir, sadəcə sintaksis tələbidir.
 
 ## Tab 4 — Momentum
 
-**Dataset:** `analytics.vw_coin_momentum_daily` (grain: 1 sətir / coin / gün)
+**Dataset:** `analytics.vw_coin_momentum_daily` (grain: 1 row / coin / day)
 
-"Son gün" cədvəlləri üçün əvvəlcə **virtual dataset** yarat
+For the "latest day" tables, first create a **virtual dataset**
 (Superset → Datasets → + Dataset → SQL):
 
 ```sql
@@ -115,7 +115,7 @@ from analytics.vw_coin_momentum_daily
 where snapshot_date = (select max(snapshot_date) from analytics.vw_coin_momentum_daily)
 ```
 
-Adı: `vw_coin_momentum_latest`. Aşağıdakı 3 cədvəl bu virtual dataset-dən oxuyur.
+Name it `vw_coin_momentum_latest`. The 3 tables below read from this virtual dataset.
 
 ### Rank Gainers — Table (`vw_coin_momentum_latest`)
 - Query Mode: Raw Records
@@ -124,29 +124,29 @@ Adı: `vw_coin_momentum_latest`. Aşağıdakı 3 cədvəl bu virtual dataset-də
 - Sort: `rank_change` DESC, Row limit: 20
 
 ### Rank Losers — Table (`vw_coin_momentum_latest`)
-- Eyni konfiq, Sort: `rank_change` ASC
+- Same config, Sort: `rank_change` ASC
 
-### Top-500-ə yeni girənlər — Table (`vw_coin_momentum_latest`)
+### New entries into the Top-500 — Table (`vw_coin_momentum_latest`)
 - Columns: `coin_symbol`, `coin_name`, `cmc_rank`, `market_cap`, `date_added_at`
-- Filters: `is_new_entry = true` (prev_cmc_rank artıq null olmur — ilk görünüşdə
-  öz rankına coalesce olunur, rank_change = 0)
+- Filters: `is_new_entry = true` (prev_cmc_rank is no longer null — on first appearance
+  it is coalesced to its own rank, rank_change = 0)
 - Sort: `cmc_rank` ASC
 
-### Coinin rank tarixi — Line Chart (`vw_coin_momentum_daily`)
+### Rank history of a coin — Line Chart (`vw_coin_momentum_daily`)
 - X-Axis: `snapshot_date`
-- Metrics: custom SQL metric → `-MIN(cmc_rank)` (mənfi işarə y-oxu "tərs çevirmək"
-  üçündür — Superset line chart-da invert-y yoxdur; rank 1 qrafikin yuxarısında görünür)
+- Metrics: custom SQL metric → `-MIN(cmc_rank)` (the negative sign is there to "invert"
+  the y-axis — Superset line charts have no invert-y; rank 1 then appears at the top of the chart)
 - Dimensions (series): `coin_symbol`
-- Dashboard-un coin filtrinə bağlıdır — filtrsiz 500 xətt çəkməsin deyə
-  chart-a default filtr qoy (məs. `cmc_rank <= 10`)
+- Tied to the dashboard's coin filter — add a default filter on the chart
+  (e.g. `cmc_rank <= 10`) so it does not draw 500 lines when unfiltered
 
-### Volatillik Top-20 — Bar Chart (`vw_coin_momentum_daily`)
+### Volatility Top-20 — Bar Chart (`vw_coin_momentum_daily`)
 - X-Axis (dimension): `coin_symbol`
 - Metrics: custom SQL metric → `STDDEV(percent_change_24h)`
-- Sort by: metrik DESC, Row limit: 20
-- Qeyd: bütün günlər üzərindən hesablanır, time range filtrinə bağlama
+- Sort by: metric DESC, Row limit: 20
+- Note: computed across all days, do not bind it to the time range filter
 
-### Yeni coinlərin performansı — Table (`analytics.vw_coin_explorer`)
+### Performance of new coins — Table (`analytics.vw_coin_explorer`)
 - Query Mode: Raw Records
 - Columns: `coin_symbol`, `coin_name`, `date_added_at`, `percent_change_30d`,
   `market_cap`, `cmc_rank`
@@ -155,13 +155,13 @@ Adı: `vw_coin_momentum_latest`. Aşağıdakı 3 cədvəl bu virtual dataset-də
 
 ---
 
-## Ümumi qurulum qeydləri
+## General setup notes
 
-1. **Time Range filtri:** dashboard səviyyəsində `snapshot_date`-ə bağlı vahid filtr —
-   yalnız Tab 1 və Tab 4-ün time-series chartlarına scope et.
-2. **Table chartlarda** həmişə Raw Records rejimi — aqreqat lazım deyil, view-lar
-   onsuz da düzgün grain-dədir.
-3. **Rəng standartı:** bütün percent_change metriklərində eyni qırmızı-yaşıl şkala.
-4. **Cache:** data gündə bir dəfə yeniləndiyi üçün dataset cache timeout ~1 saat kifayətdir.
-5. **Aqreqatlı view-larda** (`vw_coin_explorer`, `vw_sector_performance`) `MAX(...)`
-   sadəcə Superset-in metrik sintaksis tələbidir — grain 1 sətir olduğu üçün dəyəri dəyişmir.
+1. **Time Range filter:** a single dashboard-level filter bound to `snapshot_date` —
+   scope it only to the time-series charts of Tab 1 and Tab 4.
+2. **In Table charts** always use Raw Records mode — no aggregation is needed, the views
+   are already at the correct grain.
+3. **Color standard:** the same red-green scale on all percent_change metrics.
+4. **Cache:** since the data refreshes once a day, a dataset cache timeout of ~1 hour is enough.
+5. **In aggregated views** (`vw_coin_explorer`, `vw_sector_performance`) `MAX(...)` is
+   purely Superset's metric syntax requirement — with a grain of 1 row it does not change the value.
