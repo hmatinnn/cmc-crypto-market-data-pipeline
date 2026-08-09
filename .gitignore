@@ -1,6 +1,10 @@
 .env
 .venv/
 logs/
+.ipynb_checkpoints/
+
+# Personal notes / drafts kept alongside the repo but not part of it.
+docs/linkedin-post.md
 api_responses/
 api_responses_csv/
 __pycache__/
