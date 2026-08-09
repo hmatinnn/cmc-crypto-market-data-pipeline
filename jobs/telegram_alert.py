@@ -80,7 +80,7 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 
 def send_telegram_message(message: str):
-    """Telegram-a mesaj göndərən ana funksiya (HTML dəstəyi ilə).
+    """Main function for sending a message to Telegram (with HTML support).
 
     parse_mode was previously "Markdown" (Telegram's legacy V1 parser).
     V1 is notoriously fragile: a single underscore anywhere in the message
@@ -105,8 +105,8 @@ def send_telegram_message(message: str):
 
 def _extract_table_name(check) -> str:
     """
-    Soda Check obyektinin partition.table iyerarxiyasından 
-    cədvəlin real adını təhlükəsiz şəkildə çıxarır.
+    Safely extracts the real table name from the partition.table
+    hierarchy of a Soda Check object.
     """
     partition = getattr(check, "partition", None)
     if partition:
