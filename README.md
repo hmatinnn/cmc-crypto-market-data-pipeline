@@ -8,7 +8,7 @@
 
 An end-to-end **ELT data platform** that ingests cryptocurrency market data from the [CoinMarketCap Pro API](https://coinmarketcap.com/api/), lands it in a PostgreSQL data warehouse following the **medallion architecture**, models it into a **star schema with dbt**, validates it with **Soda**, and serves it through **Apache Superset** dashboards — all orchestrated by **Apache Airflow** and fully containerized with **Docker Compose**. Deployed on a Linux (Ubuntu) VPS with a **GitHub Actions CI/CD** pipeline.
 
-![Overall Architecture](cmc_overall_architecture.png)
+![Overall Architecture](docs/screenshots/cmc_overall_architecture.png)
 
 ---
 
@@ -30,26 +30,58 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 
 ---
 
-<!-- =========================== SCREENSHOTS ===========================
-  TO ENABLE: save the five images into docs/screenshots/ using exactly the
-  filenames below, then delete this comment's opening line and its closing
-  line so the section renders. See docs/screenshots/README.md for what to
-  capture.
-
 ## Screenshots
 
-| Airflow — pipelines | Airflow — one cadence chain |
-|---|---|
-| ![Airflow DAGs](docs/screenshots/airflow-dags.png) | ![Airflow graph](docs/screenshots/airflow-graph.png) |
+### Orchestration — Airflow
 
-| Superset — market overview | Grafana — pipeline health |
-|---|---|
-| ![Superset](docs/screenshots/superset-overview.png) | ![Grafana](docs/screenshots/grafana-monitoring.png) |
+15 DAGs across three cadences (daily / weekly / monthly), each split into `fetch → parse → load`, followed by the dbt and data-quality pipelines.
 
-![CI run](docs/screenshots/ci-run.png)
+| Daily listings & quotes chain | Weekly categories + monthly map-info chains |
+|---|---|
+| ![Airflow — daily pipelines](docs/screenshots/airflow-01-dags-daily.png) | ![Airflow — weekly and monthly pipelines](docs/screenshots/airflow-02-dags-weekly-monthly.png) |
+
+![Airflow — dbt and data-quality pipelines](docs/screenshots/airflow-03-dags-dbt-dq.png)
+
+*dbt transformation DAGs (`dbt_daily_fact_coin_market_pipeline`, `dbt_monthly_dim_coins_pipeline`, `dbt_weekly_dim_categories_pipeline`) and the Soda data-quality check running on the daily schedule.*
+
+### Analytics — Superset
+
+`CMC Cripto Dashboard` — four tabs served straight off the dbt marts.
+
+| Market Overview | Sectors |
+|---|---|
+| ![Superset — market overview](docs/screenshots/superset-01-market-overview.png) | ![Superset — sectors](docs/screenshots/superset-02-sectors.png) |
+| Total market cap, 24h volume, BTC dominance, top-10 share | Sector treemap by market cap and per-sector performance change |
+
+| Momentum | Coin Explorer |
+|---|---|
+| ![Superset — momentum](docs/screenshots/superset-03-momentum.png) | ![Superset — coin explorer](docs/screenshots/superset-04-coin-explorer.png) |
+| Rank gainers & losers over the last day, volatility top-20 | Top-100 table with 1h/24h/7d/30d change, market cap and volume |
+
+![Superset — coin explorer detail](docs/screenshots/superset-05-coin-explorer-detail.png)
+
+*Market cap vs. volume scatter, FDV/MC ratio and supply-utilisation panels from the Coin Explorer tab.*
+
+### Monitoring — Grafana
+
+A single `Monitoring` dashboard fed by the warehouse itself — every panel is a SQL query over the loaded tables, so the pipeline is observed from its own output.
+
+| Freshness & duplicates | Completeness & load volume |
+|---|---|
+| ![Grafana — freshness and duplicates](docs/screenshots/grafana-01-freshness-quality.png) | ![Grafana — completeness and volume](docs/screenshots/grafana-02-completeness-volume.png) |
+| Per-table freshness, duplicate-group check, row count per day | Missing-% per column, row count expected vs. inserted, freshness SLA |
+
+![Grafana — DAG status and duration](docs/screenshots/grafana-03-dag-status.png)
+
+*Per-DAG max run duration — the weekly categories fetch is the long pole at ~16 minutes.*
+
+### CI/CD
+
+| CI — lint, tests, security | CD — deploy to server |
+|---|---|
+| ![GitHub Actions — CI](docs/screenshots/ci-01-github-actions-ci.png) | ![GitHub Actions — CD](docs/screenshots/ci-02-github-actions-cd.png) |
 
 ---
-==================================================================== -->
 
 ## Why this design
 
@@ -80,7 +112,7 @@ An end-to-end **ELT data platform** that ingests cryptocurrency market data from
 
 Detailed ELT process view:
 
-![ELT Process](cmc_elt_architecture_diagram.png)
+![ELT Process](docs/screenshots/cmc_elt_architecture_diagram.png)
 
 **Runtime (all in Docker Compose):**
 
@@ -121,7 +153,7 @@ Setup DAGs (`create_schemas_dag`, `create_staging_tables_dag`) provision the war
 
 ## Warehouse Modeling
 
-![DWH Model](cmc_dwh_modeling_diagram.png)
+![DWH Model](docs/screenshots/cmc_dwh_modeling_diagram.png)
 
 dbt models flow through three internal stages:
 
